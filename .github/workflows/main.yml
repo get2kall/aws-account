@@ -42,8 +42,7 @@ jobs:
         with:
           soft_fail: true
 
-      - name: Infracost Actions
-        uses: infracost/actions@v2.1.0
+      
 
       - name: Terraform Plan
         run: cd two-tier-architecture && terraform plan
