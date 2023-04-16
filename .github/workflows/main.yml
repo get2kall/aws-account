@@ -36,9 +36,10 @@ jobs:
         run: terraform validate
         working-directory: two-tier-architecture
 
+      - name: Clone repo
+        uses: actions/checkout@master
       - name: tfsec
-        uses: aquasecurity/tfsec-action@v1.0.3
-        working-directory: two-tier-architecture
+        uses: aquasecurity/tfsec-action@v1.0.0
 
       - name: Terraform tfcost
         uses: robertpeteuil/tfcost@v1
@@ -48,8 +49,9 @@ jobs:
           working_directory: two-tier-architecture
 
       - name: Terraform Plan
-        run: terraform plan
-        working-directory: two-tier-architecture
+        run: cd two-tier-architecture && terraform plan
         id: plan
 
-      
+      # - name: Terraform Apply
+      #   if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+      #   run: cd two-tier-architecture && terraform apply -auto-approve
