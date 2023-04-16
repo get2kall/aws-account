@@ -41,12 +41,7 @@ jobs:
       - name: tfsec
         uses: aquasecurity/tfsec-action@v1.0.0
 
-      - name: Terraform tfcost
-        uses: robertpeteuil/tfcost@v1
-        with:
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          working_directory: two-tier-architecture
+      
 
       - name: Terraform Plan
         run: cd two-tier-architecture && terraform plan
