@@ -32,9 +32,11 @@ jobs:
 
     - name: Terraform Validate
       run: terraform validate
+      working-directory: two-tier-architecture
 
     - name: Terraform Plan
       run: terraform plan
+      working-directory: two-tier-architecture
 
     # Uncomment the following step to enable Terraform Apply
     # Make sure to set up the proper environment variables, such as AWS credentials, before running this step
