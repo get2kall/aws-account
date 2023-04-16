@@ -22,10 +22,8 @@ jobs:
       uses: hashicorp/setup-terraform@v2
       with:
         terraform_version: 1.1.7
-
-    - name: Change working directory
-      run: echo "TF_WORKING_DIR=${{ env.TF_WORKING_DIR }}" >> $GITHUB_ENV
-      shell: bash
+    - name: clear .terraform folder
+      run: rm-rf .terraform
 
     - name: Terraform Init
       run: terraform init
