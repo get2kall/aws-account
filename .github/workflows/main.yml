@@ -31,9 +31,9 @@ jobs:
         run: terraform validate
         working-directory: two-tier-architecture
 
-      - name: Terraform fmt
-        run: terraform fmt
-        working-directory: two-tier-tier
+      # - name: Terraform fmt
+      #   run: terraform fmt
+      #   working-directory: two-tier-tier
 
       - name: Clone repo
         uses: actions/checkout@master
