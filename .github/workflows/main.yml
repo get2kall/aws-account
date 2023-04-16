@@ -1,11 +1,14 @@
 name: Terraform CI
 
 on:
-  workflow_dispatch:
-  
+
   push:
     branches:
       - main
+      - develop
+
+env:
+  TF_WORKING_DIR: two-tier-architecture
 
 jobs:
   terraform:
@@ -16,9 +19,13 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
+      uses: hashicorp/setup-terraform@v2
       with:
-        terraform_version: 1.1.2
+        terraform_version: 1.1.7
+
+    - name: Change working directory
+      run: echo "TF_WORKING_DIR=${{ env.TF_WORKING_DIR }}" >> $GITHUB_ENV
+      shell: bash
 
     - name: Terraform Init
       run: terraform init
@@ -33,4 +40,4 @@ jobs:
     # Make sure to set up the proper environment variables, such as AWS credentials, before running this step
     #
     # - name: Terraform Apply
-    #   run: terraform apply -auto-approve
+    #   run: terraform
