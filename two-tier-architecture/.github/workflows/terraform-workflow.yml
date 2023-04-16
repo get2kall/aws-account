@@ -28,7 +28,7 @@ jobs:
     - name: Terraform Plan
       run: terraform plan
 
-    # Uncomment the following step to enable Terraform Apply
+    # Uncomment the following step to enable Terraform Apply#
     # Make sure to set up the proper environment variables, such as AWS credentials, before running this step
     #
     # - name: Terraform Apply
