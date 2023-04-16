@@ -1,11 +1,10 @@
 name: Terraform CI
 
 on:
-  workflow_dispatch:
+  
   push:
     branches:
       - main
-      - develop
 
 jobs:
   terraform:
