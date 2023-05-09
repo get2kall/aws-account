@@ -417,3 +417,167 @@ Before using this workflow, make sure you have added the required secrets (SNYK_
 In this example, the workflow reads the list of images from a file called images.txt in your repository, which should contain one image name per line. The workflow fetches the latest tag for each image, pulls the image from Docker Hub, scans it with Snyk, and pushes it to Artifactory if the vulnerability level is normal or lower.
 
 Please note that in this example, only low-severity vulnerabilities are allowed. If you need to adjust the allowed severity level, you can modify the --severity-threshold option in the snyk container test command.
+---------------------------------------------------
+
+
+Title: Automated Docker Image Update and Vulnerability Scanning with GitHub Actions
+
+Slide 1: Introduction
+
+Objective: Automate the process of updating Docker images, scanning them for vulnerabilities, and pushing them to JFrog Artifactory
+Technologies: GitHub Actions, Docker, Snyk, JFrog Artifactory
+Slide 2: Prerequisites
+
+List of Docker images with versions
+GitHub repository to store the workflow and images list
+JFrog Artifactory instance
+Snyk API token
+Slide 3: Prepare the List of Images
+
+Create an images.txt file in the GitHub repository
+Specify image names and versions, separated by colons (e.g., nginx:1.21.3)
+One image per line
+Slide 4: Add Secrets to GitHub Repository
+
+Add the following secrets to the repository:
+SNYK_TOKEN: Snyk API token
+ARTIFACTORY_USERNAME: JFrog Artifactory username
+ARTIFACTORY_PASSWORD: JFrog Artifactory password
+Slide 5: Create the GitHub Actions Workflow
+
+Create a new .github/workflows/daily_image_update.yml file in the repository
+Configure the workflow to run daily
+Define environment variables and steps to check out the repository, set up Docker, log in to Artifactory, and install jq
+Slide 6: Pull, Scan, and Push Images
+
+Iterate through the images.txt file, pulling the specified image versions
+Scan the images using Snyk
+Push the images to Artifactory if vulnerabilities are normal or lower
+Slide 7: Workflow in Action
+
+Show an example of the workflow running in a GitHub repository
+Demonstrate the output of the scanning process and the images pushed to Artifactory
+Slide 8: Conclusion
+
+Summary of the automated process
+Benefits of automation: consistent image updates, vulnerability scanning, and secure deployment
+Encourage further customization and expansion of the workflow
+You can use this outline to create a slide deck using presentation software like Microsoft PowerPoint or Google Slides. Add visuals and code snippets to help illustrate the concepts and steps. Good luck with your presentation!
+
+
+
+
+
+User
+show me the step by step process for the same
+ChatGPT
+Here's a step-by-step guide to set up the automated Docker image update and vulnerability scanning process with GitHub Actions.
+
+Step 1: Prepare the List of Images
+
+Create a new file named images.txt in your GitHub repository.
+Specify the image names and versions in the file, separated by colons (e.g., nginx:1.21.3).
+Add one image per line.
+Step 2: Add Secrets to GitHub Repository
+
+Go to the "Settings" tab in your GitHub repository.
+Click on "Secrets" in the left sidebar.
+Add the following secrets:
+SNYK_TOKEN: Snyk API token
+ARTIFACTORY_USERNAME: JFrog Artifactory username
+ARTIFACTORY_PASSWORD: JFrog Artifactory password
+Step 3: Create the GitHub Actions Workflow
+
+Create a new directory .github/workflows/ in your GitHub repository.
+Create a new YAML file named daily_image_update.yml in the .github/workflows/ directory.
+Configure the workflow to run daily using a scheduled cron job.
+Define environment variables and steps to check out the repository, set up Docker, log in to Artifactory, and install jq.
+Step 4: Pull, Scan, and Push Images
+
+In the daily_image_update.yml file, add a step to iterate through the images.txt file, pulling the specified image versions.
+Add a step to scan the images using Snyk.
+Add a step to push the images to Artifactory if the vulnerability level is normal or lower.
+Step 5: Verify the Workflow
+
+Commit and push the changes to your GitHub repository.
+Go to the "Actions" tab in your GitHub repository.
+Monitor the progress of the workflow and verify that it's running as expected.
+Check the output of the scanning process and the images pushed to Artifactory.
+By following these steps, you can set up an automated process for updating Docker images, scanning them for vulnerabilities, and pushing them to JFrog Artifactory using GitHub Actions. Customize and expand the workflow as needed to fit your specific requirements.
+
+-------------------------------------------------------------------
+
+Here's an example of how to set up the automated Docker image update and vulnerability scanning process with GitHub Actions, including the images.txt file and the complete GitHub Actions workflow.
+
+Create an images.txt file in your GitHub repository containing the images and their versions:
+nginx:1.21.3
+redis:6.2.6
+postgres:13.4
+
+Create a new directory .github/workflows/ in your GitHub repository.
+
+Create a new YAML file named daily_image_update.yml in the .github/workflows/ directory with the following content:
+
+name: Daily Image Update
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs every day at 00:00
+
+jobs:
+  update_images:
+    runs-on: ubuntu-latest
+
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+      ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to Artifactory
+      uses: docker/login-action@v1
+      with:
+        registry: artifactory.example.com
+        username: ${{ env.ARTIFACTORY_USERNAME }}
+        password: ${{ env.ARTIFACTORY_PASSWORD }}
+
+    - name: Install JQ
+      run: sudo apt-get install jq
+
+    - name: Pull Images with Versions, Scan, and Push if Vulnerability is Normal
+      run: |
+        while IFS=":" read -r image version; do
+          echo "Processing $image:$version"
+          docker pull $image:$version
+
+          # Scan with Snyk
+          snyk_report=$(snyk container test --severity-threshold=low $image:$version --json --quiet)
+          snyk_issues=$(echo "$snyk_report" | jq '.issues')
+          snyk_vulnerabilities=$(echo "$snyk_report" | jq '.vulnerabilities')
+
+          if [ -z "$snyk_vulnerabilities" ]; then
+            echo "No vulnerabilities found in $image:$version"
+            docker tag $image:$version artifactory.example.com/docker/$image:$version
+            docker push artifactory.example.com/docker/$image:$version
+          else
+            echo "Vulnerabilities found in $image:$version"
+            echo "$snyk_issues"
+          fi
+        done < images.txt
+
+
+
+Remember to replace artifactory.example.com with the domain name of your JFrog Artifactory instance.
+
+Follow the step-by-step guide provided earlier to set up the required GitHub secrets and verify the workflow.
+After completing these steps, your GitHub repository will have an automated process that pulls the specified Docker images, scans them for vulnerabilities using Snyk, and pushes them to your JFrog Artifactory instance if the vulnerability level is normal or lower.
+
+----------------------------------------------------------------
+
+
