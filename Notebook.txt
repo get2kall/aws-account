@@ -344,3 +344,76 @@ jobs:
 
 
 With this modification, the workflow will still pull the specified public image from Docker Hub, scan it with Wiz and Snyk, and push it to Artifactory without requiring Docker Hub login credentials.
+
+
+------------------------------------------------------------------
+
+
+Here's an example of a GitHub Actions workflow that meets your requirements:
+
+Pull the latest images from a public repository (Docker Hub).
+Scan the images with Snyk.
+Push the images to JFrog Artifactory if the vulnerability level is normal or lower.
+Schedule the workflow to run every day.
+
+# .github/workflows/daily_image_update.yml
+name: Daily Image Update
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs every day at 00:00
+
+jobs:
+  update_images:
+    runs-on: ubuntu-latest
+
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+      ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to Artifactory
+      uses: docker/login-action@v1
+      with:
+        registry: my_artifactory.example.com
+        username: ${{ env.ARTIFACTORY_USERNAME }}
+        password: ${{ env.ARTIFACTORY_PASSWORD }}
+
+    - name: Install JQ
+      run: sudo apt-get install jq
+
+    - name: Pull Latest Images, Scan and Push if Vulnerability is Normal
+      run: |
+        while read image; do
+          latest_tag=$(curl -s https://registry.hub.docker.com/v2/repositories/library/$image/tags/?page_size=10 | jq '.results[].name' | grep -v "alpine\|mainline" | grep -E "^[0-9]" | sort -V -r | head -1 | tr -d '"')
+          echo "Latest tag for $image: $latest_tag"
+          docker pull $image:$latest_tag
+
+          # Scan with Snyk
+          snyk_report=$(snyk container test --severity-threshold=low $image:$latest_tag --json --quiet)
+          snyk_issues=$(echo "$snyk_report" | jq '.issues')
+          snyk_vulnerabilities=$(echo "$snyk_report" | jq '.vulnerabilities')
+
+          if [ -z "$snyk_vulnerabilities" ]; then
+            echo "No vulnerabilities found in $image:$latest_tag"
+            docker tag $image:$latest_tag my_artifactory.example.com/$image:$latest_tag
+            docker push my_artifactory.example.com/$image:$latest_tag
+          else
+            echo "Vulnerabilities found in $image:$latest_tag"
+            echo "$snyk_issues"
+          fi
+        done < images.txt
+
+
+Before using this workflow, make sure you have added the required secrets (SNYK_TOKEN, ARTIFACTORY_USERNAME, and ARTIFACTORY_PASSWORD) in your GitHub repository settings.
+
+In this example, the workflow reads the list of images from a file called images.txt in your repository, which should contain one image name per line. The workflow fetches the latest tag for each image, pulls the image from Docker Hub, scans it with Snyk, and pushes it to Artifactory if the vulnerability level is normal or lower.
+
+Please note that in this example, only low-severity vulnerabilities are allowed. If you need to adjust the allowed severity level, you can modify the --severity-threshold option in the snyk container test command.
