@@ -1,0 +1,346 @@
+Title: Automated Docker Image Pull/Push and Wiz/Snyk Scanning Integration
+
+Overview
+This document outlines a design for automating the process of pulling and pushing Docker images, as well as integrating Wiz and Snyk scanning features to ensure security and compliance. This will streamline the CI/CD pipeline, reduce manual efforts, and enhance overall security.
+
+Components
+2.1. Docker Registry
+2.2. CI/CD Pipeline
+2.3. Wiz Scanner
+2.4. Snyk Scanner
+2.5. Notification System
+
+Workflow
+3.1. Pull Docker Images
+3.2. Scan Docker Images with Wiz
+3.3. Scan Docker Images with Snyk
+3.4. Push Docker Images
+3.5. Notify Results
+
+Detailed Design
+
+4.1. Docker Registry
+
+Host and manage Docker images in a secure and private environment
+Support multiple registries for different environments (development, staging, production)
+Enable authentication and access control
+4.2. CI/CD Pipeline
+
+Implement a CI/CD pipeline using a tool like Jenkins, GitLab CI, or CircleCI
+Configure pipeline to trigger on source code changes
+Automate the process of building, scanning, and pushing Docker images
+4.3. Wiz Scanner
+
+Integrate Wiz scanner to perform vulnerability assessments and security checks on Docker images
+Run Wiz scanner on pulled images and generate reports
+Use Wiz CLI or API to automate scanning and result retrieval
+Set up rules for passing/failing builds based on scan results
+4.4. Snyk Scanner
+
+Integrate Snyk scanner to identify and fix vulnerabilities in open-source dependencies
+Run Snyk scanner on pulled images and generate reports
+Use Snyk CLI or API to automate scanning and result retrieval
+Set up rules for passing/failing builds based on scan results
+4.5. Notification System
+
+Set up notifications to inform relevant parties about scan results and build status
+Use email, Slack, or other communication platforms for notifications
+Customize notification templates to include relevant information and actionable items
+Implementation Steps
+
+Set up Docker registries for different environments
+
+Implement CI/CD pipeline and configure triggers
+
+Integrate Wiz scanner and Snyk scanner into the CI/CD pipeline
+
+Configure automated scanning and result retrieval
+
+Set up rules for passing/failing builds based on scan results
+
+Implement a notification system for scan results and build status
+
+Maintenance
+
+Regularly update scanners for the latest vulnerability databases
+Periodically review and update rules for passing/failing builds
+Monitor the CI/CD pipeline for any issues and resolve them promptly
+
+
+Below is an example of a GitHub Actions workflow implementing the automated Docker image pull/push and Wiz/Snyk scanning features as described in the design document:
+
+
+# .github/workflows/ci-cd.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to Docker Registry
+      uses: docker/login-action@v1
+      with:
+        registry: my_registry.example.com
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Pull Docker Image
+      run: docker pull my_registry.example.com/my_image:latest
+
+    - name: Scan with Wiz
+      run: |
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -e WIZ_API_KEY=${{ secrets.WIZ_API_KEY }} wiz wiz/docker:latest scan my_registry.example.com/my_image:latest
+        wiz get-results --api-key=${{ secrets.WIZ_API_KEY }} --format json > wiz-results.json
+
+    - name: Scan with Snyk
+      run: |
+        docker pull snyk/snyk-cli:docker
+        docker run --rm -e SNYK_TOKEN=${{ secrets.SNYK_TOKEN }} -v /var/run/docker.sock:/var/run/docker.sock -v "$(pwd)/snyk:/project" snyk/snyk-cli:docker docker scan my_registry.example.com/my_image:latest --file=snyk-results.json
+
+    - name: Analyze Scan Results
+      run: python analyze_scan_results.py
+
+    - name: Push Docker Image
+      run: docker push my_registry.example.com/my_image:latest
+
+    - name: Notify Results
+      uses: actions/github-script@v5
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const scan_results = JSON.parse(fs.readFileSync('scan-results-summary.json', 'utf-8'));
+          const pr_number = context.payload.number;
+          const message = `### Scan Results:\n${scan_results.message}\n\n**Status:** ${scan_results.status ? '✅ Passed' : '❌ Failed'}`;
+          if (pr_number) {
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr_number,
+              body: message,
+            });
+          }
+
+
+
+
+
+
+
+This GitHub Actions workflow will be triggered upon a push or pull request event in the main branch. It first checks out the repository, sets up Docker Buildx, and logs in to the Docker registry. Then, it pulls the Docker image and scans it with both Wiz and Snyk scanners. After analyzing the scan results, the workflow pushes the Docker image to the registry and notifies the results as a comment on the PR (if applicable).
+
+
+
+-------------------------------------------------------------------------------------------------------
+
+i have list of images for example nginx and i want to search the dockerhub every week for the latest image release and it should pull from the dockerhub and scan and it should upload to artifactory 
+
+You can create a scheduled GitHub Actions workflow to search Docker Hub for the latest image releases, pull them, scan with Wiz and Snyk, and then push the scanned images to Artifactory. Here's an example workflow:
+
+# .github/workflows/scheduled_image_update.yml
+name: Scheduled Image Update
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Runs every Monday at 00:00
+
+jobs:
+  update_images:
+    runs-on: ubuntu-latest
+
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+      ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+      ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        registry: registry.hub.docker.com
+        username: ${{ env.DOCKERHUB_USERNAME }}
+        password: ${{ env.DOCKERHUB_PASSWORD }}
+
+    - name: Login to Artifactory
+      uses: docker/login-action@v1
+      with:
+        registry: my_artifactory.example.com
+        username: ${{ env.ARTIFACTORY_USERNAME }}
+        password: ${{ env.ARTIFACTORY_PASSWORD }}
+
+    - name: Pull Latest Images and Scan
+      run: |
+        declare -a images=("nginx")
+        for image in "${images[@]}"; do
+          latest_tag=$(curl -s -u $DOCKERHUB_USERNAME:$DOCKERHUB_PASSWORD https://registry.hub.docker.com/v2/repositories/library/$image/tags/?page_size=10 | jq '.results[].name' | grep -v "alpine\|mainline" | grep -E "^[0-9]" | sort -V -r | head -1 | tr -d '"')
+          echo "Latest tag for $image: $latest_tag"
+          docker pull $image:$latest_tag
+          # Scan with Wiz and Snyk (use the scanning steps from the previous example)
+          docker tag $image:$latest_tag my_artifactory.example.com/$image:$latest_tag
+          docker push my_artifactory.example.com/$image:$latest_tag
+        done
+
+
+In this example, the workflow is scheduled to run every week (Monday 00:00) using the cron syntax. The images array stores the list of images you want to update. For each image, the workflow retrieves the latest tag from Docker Hub, pulls the image, scans it with Wiz and Snyk (as shown in the previous example), tags the image with the Artifactory registry, and pushes it to Artifactory.
+
+You need to add the required secrets (DOCKERHUB_USERNAME, DOCKERHUB_PASSWORD, ARTIFACTORY_USERNAME, and ARTIFACTORY_PASSWORD) in your GitHub repository settings.
+
+The example above uses jq to parse JSON output. Make sure to include the following step to install jq before using it in the workflow:
+
+- name: Install JQ
+  run: sudo apt-get install jq
+
+
+You can modify the "Pull Latest Images and Scan" step in the workflow to read the image names from images.txt:
+
+- name: Pull Latest Images and Scan
+  run: |
+    while read image; do
+      latest_tag=$(curl -s -u $DOCKERHUB_USERNAME:$DOCKERHUB_PASSWORD https://registry.hub.docker.com/v2/repositories/library/$image/tags/?page_size=10 | jq '.results[].name' | grep -v "alpine\|mainline" | grep -E "^[0-9]" | sort -V -r | head -1 | tr -d '"')
+      echo "Latest tag for $image: $latest_tag"
+      docker pull $image:$latest_tag
+      # Scan with Wiz and Snyk (use the scanning steps from the previous example)
+      docker tag $image:$latest_tag my_artifactory.example.com/$image:$latest_tag
+      docker push my_artifactory.example.com/$image:$latest_tag
+    done < images.txt
+
+
+This will read the image names from the images.txt file in your repository and process each image one by one, retrieving the latest tag from Docker Hub, pulling the image, scanning it with Wiz and Snyk, and pushing it to Artifactory.
+
+------------------------------------------------------------------------
+
+If you want to manually enter the image version in the GitHub Actions workflow, you can use GitHub Actions' workflow_dispatch event, which allows you to manually trigger the workflow with input parameters.
+
+Here's an example workflow that accepts image name and version as input parameters:
+
+# .github/workflows/manual_image_update.yml
+name: Manual Image Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: 'Docker image name (e.g., nginx)'
+        required: true
+      image_version:
+        description: 'Docker image version (e.g., 1.21.3)'
+        required: true
+
+jobs:
+  update_image:
+    runs-on: ubuntu-latest
+
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+      ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+      ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        registry: registry.hub.docker.com
+        username: ${{ env.DOCKERHUB_USERNAME }}
+        password: ${{ env.DOCKERHUB_PASSWORD }}
+
+    - name: Login to Artifactory
+      uses: docker/login-action@v1
+      with:
+        registry: my_artifactory.example.com
+        username: ${{ env.ARTIFACTORY_USERNAME }}
+        password: ${{ env.ARTIFACTORY_PASSWORD }}
+
+    - name: Pull Specified Image and Scan
+      run: |
+        image=${{ github.event.inputs.image_name }}
+        version=${{ github.event.inputs.image_version }}
+        docker pull $image:$version
+        # Scan with Wiz and Snyk (use the scanning steps from the previous example)
+        docker tag $image:$version my_artifactory.example.com/$image:$version
+        docker push my_artifactory.example.com/$image:$version
+
+
+
+With this workflow, you can manually trigger the workflow from the GitHub Actions tab in your repository, and you'll be prompted to enter the image name and version. The workflow will then pull the specified image, scan it with Wiz and Snyk, and push it to Artifactory.
+
+Please note that you need to replace the placeholder comments with the actual scanning steps for Wiz and Snyk, as shown in the previous examples.
+
+------------------------------------------------------------
+
+Yes, you can pull public images from Docker Hub without logging in. You can remove the "Login to Docker Hub" step from the workflow if you are only dealing with public images. Here's the modified workflow that skips Docker Hub login:
+
+# .github/workflows/manual_image_update.yml
+name: Manual Image Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: 'Docker image name (e.g., nginx)'
+        required: true
+      image_version:
+        description: 'Docker image version (e.g., 1.21.3)'
+        required: true
+
+jobs:
+  update_image:
+    runs-on: ubuntu-latest
+
+    env:
+      ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+      ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to Artifactory
+      uses: docker/login-action@v1
+      with:
+        registry: my_artifactory.example.com
+        username: ${{ env.ARTIFACTORY_USERNAME }}
+        password: ${{ env.ARTIFACTORY_PASSWORD }}
+
+    - name: Pull Specified Image and Scan
+      run: |
+        image=${{ github.event.inputs.image_name }}
+        version=${{ github.event.inputs.image_version }}
+        docker pull $image:$version
+        # Scan with Wiz and Snyk (use the scanning steps from the previous example)
+        docker tag $image:$version my_artifactory.example.com/$image:$version
+        docker push my_artifactory.example.com/$image:$version
+
+
+With this modification, the workflow will still pull the specified public image from Docker Hub, scan it with Wiz and Snyk, and push it to Artifactory without requiring Docker Hub login credentials.
