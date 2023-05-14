@@ -1,49 +1,57 @@
-import json
+Docker Image Processing Design Document
+Overview
+The objective of this workflow is to automate operations on a set of Docker images. These operations include pulling the image, scanning it using Snyk, and pushing it to JFrog. The list of Docker images to be processed is maintained in a file called images.txt, with each line representing a Docker image in the format registry/image:tag.
 
-# Read the contents of images.txt
-with open('images.txt', 'r') as file:
-    content = file.read().strip()
+Input File: images.txt
+The images.txt file is a critical input for this workflow. It contains a list of Docker images to be processed, each line representing a Docker image in the format registry/image:tag. Here's an example:
 
-# Process the content and create the matrix JSON data
-lines = content.split('\n')
-image_list = []
-for line in lines:
-    # Remove leading/trailing whitespace from each line
-    line = line.strip()
+docker.io/nginx:latest
+docker.io/redis:latest
+123456789012.dkr.ecr.us-west-2.amazonaws.com/my-ecr-repo:latest
+gcr.io/my-gcr-repo:latest
 
-    # Handle different image name formats
-    if ':' in line:
-        # If the line contains a colon, assume it's in the format "registry/image:tag"
-        parts = line.split(':')
-        if len(parts) == 3:
-            # If the line has three parts, consider the first part as the registry, second as the image, and third as the version
-            registry = parts[0]
-            image = parts[1]
-            version = parts[2]
-        elif len(parts) == 2:
-            # If the line has two parts, consider the first part as the image and the second as the version
-            registry = ''
-            image = parts[0]
-            version = parts[1]
-        else:
-            print(f"Invalid format in line: {line}")
-            continue
-    else:
-        # If the line does not contain a colon, assume it's just the image name with no specified version or registry
-        registry = ''
-        image = line
-        version = ''
 
-    image_list.append({
-        'registry': registry,
-        'image': image,
-        'version': version
-    })
+Shell Script: prepare-matrix.sh
+The prepare-matrix.sh shell script is used in the prepare_matrix job to convert the content of the images.txt file into a JSON array. This JSON array is used as a matrix for the subsequent job in the workflow.
 
-matrix_data = {
-    'include': image_list
-}
-matrix_output = json.dumps(matrix_data)
+Here's the code for the prepare-matrix.sh script:
 
-# Output the matrix data to stdout
-print(matrix_output)
+#!/bin/bash
+
+content=$(cat images.txt)
+json_content=$(echo "$content" | jq -R -s -c 'split("\n")[:-1] | map(split("/") | {"registry": .[0], "image": .[1], "tag": .[2]})')
+echo "::set-output name=matrix::$json_content"
+
+
+In this script, we first read the content of the images.txt file. Then, we use the jq command-line tool to convert the content into a JSON array. Each line in the images.txt file is split at the slash / and colon : delimiters, and a JSON object is constructed for each line with registry, image, and tag properties. The JSON array is then output as a matrix for the subsequent job in the workflow.
+
+Workflow Structure
+The workflow is divided into two jobs:
+
+prepare_matrix: This job generates a matrix of Docker images that will be processed.
+process_images: This job performs the pull, scan, and push operations on each Docker image in the matrix.
+Job 1: prepare_matrix
+This job prepares the matrix of Docker images to be processed. It reads the images.txt file, which contains a list of Docker images in the format registry/image:tag, and generates a JSON array to be used as a matrix in the subsequent job.
+
+The steps involved in this job are:
+
+Checkout code: This step checks out the repository code, which gives the workflow access to it.
+
+
+- name: Checkout code
+  uses: actions/checkout@v2
+
+
+Prepare matrix: This step reads the images.txt file and processes it into a JSON array, which is output as a matrix for the subsequent job. It uses a shell script to convert the content of images.txt into a JSON array.
+
+- name: Prepare matrix
+  id: set-matrix
+  run: ./prepare-matrix.sh
+
+
+Job 2: process_images
+This job performs the pull, scan, and push operations on each Docker image in the matrix prepared by the prepare_matrix job.
+
+The steps involved in this job are:
+
+Login to DockerHub: This step logs into DockerHub using the docker/login-action@v1 action with credentials stored as GitHub secrets
