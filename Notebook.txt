@@ -1,3 +1,31 @@
+import json
+
+# Read the contents of images.txt
+with open('images.txt', 'r') as file:
+    content = file.read().strip()
+
+# Process the content and create the matrix JSON data
+lines = content.split('\n')
+image_list = []
+for line in lines:
+    parts = line.strip().split(':')
+    image_list.append({
+        'image': parts[0],
+        'version': parts[1]
+    })
+
+matrix_data = {
+    'include': image_list
+}
+matrix_output = json.dumps(matrix_data)
+
+# Output the matrix data to $GITHUB_OUTPUT
+with open('$GITHUB_OUTPUT', 'w') as output_file:
+    output_file.write(matrix_output)
+
+
+
+
 name: Docker Image Processing
 
 on:
@@ -6,47 +34,41 @@ on:
       - main
 
 jobs:
-  prepare_matrix:
+  prepare-matrix:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
 
-    - name: Set up JQ
-      uses: chris48s/setup-jq-action@v1.0.0
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Compute matrix
-      id: set-matrix
-      run: |
-        content=$(cat images.txt)
-        json_content=$(jq -R -s -c 'split("\n")[:-1] | map({image: .})' <<< "$content")
-        echo "::set-output name=matrix::$json_content"
+      - name: Read and process images.txt
+        id: set-matrix
+        run: python prepare_matrix.py
 
   process-images:
-    needs: prepare_matrix
+    needs: prepare-matrix
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        image: ${{fromJson(needs.prepare_matrix.outputs.matrix)}}
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Set up Snyk
+        uses: snyk/actions/setup@master
+        with:
+          token: ${{ secrets.SNYK_TOKEN }}
 
-    - name: Setup Docker
-      uses: docker/setup-docker-buildx-action@v1
-
-    - name: Setup Snyk
-      uses: snyk/actions/setup@master
-      with:
-        token: ${{ secrets.SNYK_TOKEN }}
-
-    - name: Run Script for Each Image
-      run: |
-        ./your-shell-script.sh ${{ matrix.image }}
+      - name: Run script for each image
+        run: |
+          ./your-shell-script.sh -i ${{ matrix.image }}:${{ matrix.version }} --scanTool snyk
