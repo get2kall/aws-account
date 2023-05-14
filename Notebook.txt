@@ -55,3 +55,58 @@ This job performs the pull, scan, and push operations on each Docker image in th
 The steps involved in this job are:
 
 Login to DockerHub: This step logs into DockerHub using the docker/login-action@v1 action with credentials stored as GitHub secrets
+
+- name: Login to DockerHub
+  uses: docker/login-action@v1
+  with:
+    username: ${{ secrets.DOCKERHUB_USERNAME }}
+    password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+
+Login to Amazon ECR: This step logs into Amazon ECR using the docker/login-action@v1 action and AWS credentials stored as GitHub secrets.
+
+- name: Login to Amazon ECR
+  uses: docker/login-action@v1
+  with:
+    registry: <your-amazon-ecr-registry>
+    username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+
+Login to Google GCR: This step logs into Google GCR using the docker/login-action@v1 action and GCR credentials stored as GitHub secrets.
+
+- name: Login to Google GCR
+  uses: docker/login-action@v1
+  with:
+    registry: gcr.io
+    username: _json_key
+    password: ${{ secrets.GCR_JSON_KEY }}
+
+
+Set up Snyk: This step sets up Snyk using the snyk/actions/setup@master action and a Snyk token stored as a GitHub secret.
+- name: Set up Snyk
+  uses: snyk/actions/setup@master
+  with:
+    token: ${{ secrets.SNYK_TOKEN }}
+Run script for each image: This step runs a shell script for each Docker image in the matrix. The shell script
+
+Step Execution: Running the Shell Script
+This step in the workflow executes the shell script on each Docker image derived from the matrix created in the prepare_matrix job. The shell script is expected to pull the image, scan it using Snyk, and push it to JFrog.
+
+Here's a detailed explanation of this step:
+
+Step Name: "Run script for each image". This name is used to identify the step in logs and reports.
+
+Command: The command to be run is a shell script located in the same directory as the workflow file. The shell script is invoked with ./your-shell-script.sh, where your-shell-script.sh is a placeholder for the actual script's name.
+
+Image Identifier Input: The -i option is used to pass the Docker image identifier to the shell script. The Docker image identifier is composed of registry, image, and tag extracted from the images.txt file and combined into the format registry/image:tag. In the workflow, this is expressed as ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.tag }}.
+
+Scanning Tool Specification: The --scanTool snyk argument specifies that Snyk should be used as the scanning tool in the shell script. This argument's actual effect will depend on how the shell script is implemented.
+
+Here's how this step is represented in the workflow:
+
+- name: Run script for each image
+  run: |
+    ./your-shell-script.sh -i ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.tag }} --scanTool snyk
+    
+This step is crucial in our workflow as it performs the primary operation of processing the Docker images. It executes the shell script that handles the image pulling, scanning, and pushing for each Docker image specified in the images.txt file.
