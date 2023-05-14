@@ -8,10 +8,36 @@ with open('images.txt', 'r') as file:
 lines = content.split('\n')
 image_list = []
 for line in lines:
-    parts = line.strip().split(':')
+    # Remove leading/trailing whitespace from each line
+    line = line.strip()
+
+    # Handle different image name formats
+    if ':' in line:
+        # If the line contains a colon, assume it's in the format "registry/image:tag"
+        parts = line.split(':')
+        if len(parts) == 3:
+            # If the line has three parts, consider the first part as the registry, second as the image, and third as the version
+            registry = parts[0]
+            image = parts[1]
+            version = parts[2]
+        elif len(parts) == 2:
+            # If the line has two parts, consider the first part as the image and the second as the version
+            registry = ''
+            image = parts[0]
+            version = parts[1]
+        else:
+            print(f"Invalid format in line: {line}")
+            continue
+    else:
+        # If the line does not contain a colon, assume it's just the image name with no specified version or registry
+        registry = ''
+        image = line
+        version = ''
+
     image_list.append({
-        'image': parts[0],
-        'version': parts[1]
+        'registry': registry,
+        'image': image,
+        'version': version
     })
 
 matrix_data = {
@@ -19,56 +45,5 @@ matrix_data = {
 }
 matrix_output = json.dumps(matrix_data)
 
-# Output the matrix data to $GITHUB_OUTPUT
-with open('$GITHUB_OUTPUT', 'w') as output_file:
-    output_file.write(matrix_output)
-
-
-
-
-name: Docker Image Processing
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  prepare-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.x
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Read and process images.txt
-        id: set-matrix
-        run: python prepare_matrix.py
-
-  process-images:
-    needs: prepare-matrix
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
-
-    steps:
-      - name: Set up Snyk
-        uses: snyk/actions/setup@master
-        with:
-          token: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Run script for each image
-        run: |
-          ./your-shell-script.sh -i ${{ matrix.image }}:${{ matrix.version }} --scanTool snyk
+# Output the matrix data to stdout
+print(matrix_output)
