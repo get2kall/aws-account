@@ -1,1 +1,39 @@
-json_content=$(jq -R -s -c 'split("\n")[:-1] | map({registry: split("/")[0], image: (split(":")[0] | split("/")[1:] | join("/")), version: if contains(":") then split(":")[1] else "latest" end})' <<< "$content")
+#!/bin/bash
+
+# Read non-empty lines from images.txt into a variable
+content=$(grep -v "^$" images.txt)
+
+# Process the content line by line
+matrix="["
+
+for line in $content
+do
+    # Split each line into registry, image and version
+    IFS=':'
+    read -ra ADDR <<< "$line"
+    image_and_tag="${ADDR[0]}"
+    version="${ADDR[1]}"
+    
+    IFS='/'
+    read -ra ADDR <<< "$image_and_tag"
+    registry="${ADDR[0]}"
+    image=$(echo "${ADDR[@]:1}" | tr ' ' '/')
+    
+    # Assign default values if necessary
+    if [ -z "$registry" ]; then
+        registry="docker.io"
+    fi
+    if [ -z "$version" ]; then
+        version="latest"
+    fi
+    
+    # Add to matrix
+    matrix+="{\"registry\":\"$registry\",\"image\":\"$image\",\"version\":\"$version\"},"
+done
+
+# Remove the trailing comma and close the matrix array
+matrix=${matrix%?}
+matrix+="]"
+
+# Print the JSON string
+echo "::set-output name=matrix::$matrix"
