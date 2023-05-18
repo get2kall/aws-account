@@ -29,9 +29,8 @@ for line in lines:
         "version": split_line[1]
     })
 
-# Print JSON matrix
-json_matrix = json.dumps(matrix)
+# Wrap matrix in a dictionary under the "include" key
+json_matrix = json.dumps({"include": matrix})
 
-# Set environment variable for use in subsequent steps
-with open(os.getenv('GITHUB_ENV'), 'a') as f:
-    f.write(f"matrix={json_matrix}\n")
+# Print JSON matrix as an output variable
+print(f"::set-output name=matrix::{json_matrix}")
