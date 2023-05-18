@@ -1,112 +1,22 @@
-Docker Image Processing Design Document
-Overview
-The objective of this workflow is to automate operations on a set of Docker images. These operations include pulling the image, scanning it using Snyk, and pushing it to JFrog. The list of Docker images to be processed is maintained in a file called images.txt, with each line representing a Docker image in the format registry/image:tag.
-
-Input File: images.txt
-The images.txt file is a critical input for this workflow. It contains a list of Docker images to be processed, each line representing a Docker image in the format registry/image:tag. Here's an example:
-
-docker.io/nginx:latest
-docker.io/redis:latest
-123456789012.dkr.ecr.us-west-2.amazonaws.com/my-ecr-repo:latest
-gcr.io/my-gcr-repo:latest
-
-
-Shell Script: prepare-matrix.sh
-The prepare-matrix.sh shell script is used in the prepare_matrix job to convert the content of the images.txt file into a JSON array. This JSON array is used as a matrix for the subsequent job in the workflow.
-
-Here's the code for the prepare-matrix.sh script:
-
-#!/bin/bash
-
-content=$(cat images.txt)
-json_content=$(echo "$content" | jq -R -s -c 'split("\n")[:-1] | map(split("/") | {"registry": .[0], "image": .[1], "tag": .[2]})')
-echo "::set-output name=matrix::$json_content"
-
-
-In this script, we first read the content of the images.txt file. Then, we use the jq command-line tool to convert the content into a JSON array. Each line in the images.txt file is split at the slash / and colon : delimiters, and a JSON object is constructed for each line with registry, image, and tag properties. The JSON array is then output as a matrix for the subsequent job in the workflow.
-
-Workflow Structure
-The workflow is divided into two jobs:
-
-prepare_matrix: This job generates a matrix of Docker images that will be processed.
-process_images: This job performs the pull, scan, and push operations on each Docker image in the matrix.
-Job 1: prepare_matrix
-This job prepares the matrix of Docker images to be processed. It reads the images.txt file, which contains a list of Docker images in the format registry/image:tag, and generates a JSON array to be used as a matrix in the subsequent job.
-
-The steps involved in this job are:
-
-Checkout code: This step checks out the repository code, which gives the workflow access to it.
-
-
-- name: Checkout code
-  uses: actions/checkout@v2
-
-
-Prepare matrix: This step reads the images.txt file and processes it into a JSON array, which is output as a matrix for the subsequent job. It uses a shell script to convert the content of images.txt into a JSON array.
-
-- name: Prepare matrix
+- name: Compute matrix
   id: set-matrix
-  run: ./prepare-matrix.sh
-
-
-Job 2: process_images
-This job performs the pull, scan, and push operations on each Docker image in the matrix prepared by the prepare_matrix job.
-
-The steps involved in this job are:
-
-Login to DockerHub: This step logs into DockerHub using the docker/login-action@v1 action with credentials stored as GitHub secrets
-
-- name: Login to DockerHub
-  uses: docker/login-action@v1
-  with:
-    username: ${{ secrets.DOCKERHUB_USERNAME }}
-    password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-
-Login to Amazon ECR: This step logs into Amazon ECR using the docker/login-action@v1 action and AWS credentials stored as GitHub secrets.
-
-- name: Login to Amazon ECR
-  uses: docker/login-action@v1
-  with:
-    registry: <your-amazon-ecr-registry>
-    username: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-
-Login to Google GCR: This step logs into Google GCR using the docker/login-action@v1 action and GCR credentials stored as GitHub secrets.
-
-- name: Login to Google GCR
-  uses: docker/login-action@v1
-  with:
-    registry: gcr.io
-    username: _json_key
-    password: ${{ secrets.GCR_JSON_KEY }}
-
-
-Set up Snyk: This step sets up Snyk using the snyk/actions/setup@master action and a Snyk token stored as a GitHub secret.
-- name: Set up Snyk
-  uses: snyk/actions/setup@master
-  with:
-    token: ${{ secrets.SNYK_TOKEN }}
-Run script for each image: This step runs a shell script for each Docker image in the matrix. The shell script
-
-Step Execution: Running the Shell Script
-This step in the workflow executes the shell script on each Docker image derived from the matrix created in the prepare_matrix job. The shell script is expected to pull the image, scan it using Snyk, and push it to JFrog.
-
-Here's a detailed explanation of this step:
-
-Step Name: "Run script for each image". This name is used to identify the step in logs and reports.
-
-Command: The command to be run is a shell script located in the same directory as the workflow file. The shell script is invoked with ./your-shell-script.sh, where your-shell-script.sh is a placeholder for the actual script's name.
-
-Image Identifier Input: The -i option is used to pass the Docker image identifier to the shell script. The Docker image identifier is composed of registry, image, and tag extracted from the images.txt file and combined into the format registry/image:tag. In the workflow, this is expressed as ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.tag }}.
-
-Scanning Tool Specification: The --scanTool snyk argument specifies that Snyk should be used as the scanning tool in the shell script. This argument's actual effect will depend on how the shell script is implemented.
-
-Here's how this step is represented in the workflow:
-
-- name: Run script for each image
   run: |
-    ./your-shell-script.sh -i ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.tag }} --scanTool snyk
-    
-This step is crucial in our workflow as it performs the primary operation of processing the Docker images. It executes the shell script that handles the image pulling, scanning, and pushing for each Docker image specified in the images.txt file.
+    content=$(sed -n '/\S/p' images.txt)  # Skip blank lines using sed
+    json_content=$(jq -R -s -c 'split("\n")[:-1] | map(split(":") | {image: (.[0] | split("/")), version: .[1]})' <<< "$content")
+    json_content=$(jq -c 'map({registry: .image[0], image: .image[1: ] | join("/"), version: .version})' <<< "$json_content")
+    echo "::set-output name=matrix::$json_content"
+
+- name: Login to ECR
+  if: matrix.registry == '1234.dkr.ecr.us-east-1.amazonaws.com'
+  run: |
+    # Your ECR login commands here
+
+- name: Login to GCR
+  if: matrix.registry == 'gcr.io'
+  run: |
+    # Your GCR login commands here
+
+# Similar steps for other registries as required
+
+- name: Run synchimage.sh
+  run: ./synchimage.sh -i ${{matrix.registry}}/${{matrix.image}}:${{matrix.version}}  --scanTool snyk
