@@ -2,12 +2,11 @@
 
 content=$(grep -v "^$" images.txt)
 
-json_content=$(jq -Rn '
-  (inputs | split(":") | 
-  {
-    registry: (split("/")[0] // "docker.io"),
-    image: (split("/")[1:] | join("/") // .),
-    version: .[1] // "latest"
-  })' <<< "$content")
+json_content=$(jq -Rn '[inputs | 
+  { 
+    registry: (if split(":")[0] | split("/")[0] == "" then "docker.io" else split(":")[0] | split("/")[0] end), 
+    image: (if split(":")[0] | split("/")[1:] | join("/") == "" then split(":")[0] else split(":")[0] | split("/")[1:] | join("/") end), 
+    version: (if split(":")[1] == "" then "latest" else split(":")[1] end) 
+  }]' <<< "$content")
 
 echo "::set-output name=matrix::$json_content"
