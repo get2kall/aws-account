@@ -1,0 +1,49 @@
+Certainly! Here's a description of the updated Python code that deletes Docker images in JFrog Artifactory:
+
+Import the necessary libraries: The script starts by importing the requests library, which will be used to send HTTP requests to the Artifactory API.
+
+Artifactory API configuration: Set the artifactory_url variable to the base URL of your Artifactory instance. Assign the api_key variable with your Artifactory API key for authentication. Set the repository variable to the name of the Docker repository in Artifactory.
+
+Define the images to delete: Create a dictionary named images that maps image names to their respective versions. Each image can have multiple versions specified as a list.
+
+Define the delete_images() function: This function iterates over the images dictionary and performs the deletion of Docker images in Artifactory.
+
+Delete Docker images in Artifactory: Inside the delete_images() function, there are nested loops to iterate over each image and its versions. For each image version, a deletion URL is constructed using the Artifactory base URL, repository name, image name, and version. The deletion URL is used to send a DELETE request to Artifactory with the appropriate headers (including the API key).
+
+Handle the deletion response: After sending the DELETE request, the script checks the response status code. If the status code is 204 (No Content), it means the deletion was successful, and the script prints a success message. Otherwise, if the status code is different, it prints a failure message.
+
+Execute the deletion: Call the delete_images() function to initiate the deletion process.
+
+Remember to update the placeholder values (your-artifactory-url.com, your-artifactory-api-key, docker-repo, image-1, 1.0, 1.1, etc.) with the actual values corresponding to your setup. This code will delete the specified Docker images and versions from the specified Artifactory repository.
+
+
+
+
+
+import requests
+
+# Artifactory API configuration
+artifactory_url = "https://your-artifactory-url.com"
+api_key = "your-artifactory-api-key"
+repository = "docker-repo"
+images = {
+    "image-1": ["1.0", "1.1", "1.2"],
+    "image-2": ["2.0", "2.1", "2.2"],
+    "image-3": ["3.0", "3.1", "3.2"]
+}
+
+# Delete Docker images in Artifactory
+def delete_images():
+    for image, versions in images.items():
+        for version in versions:
+            deletion_url = f"{artifactory_url}/api/docker/{repository}/{image}:{version}"
+            headers = {"X-JFrog-Art-Api": api_key}
+
+            response = requests.delete(deletion_url, headers=headers)
+            if response.status_code == 204:
+                print(f"Deleted image: {image}:{version}")
+            else:
+                print(f"Failed to delete image: {image}:{version}")
+
+# Delete images
+delete_images()
