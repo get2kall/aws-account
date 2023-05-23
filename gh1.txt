@@ -16,14 +16,14 @@ jobs:
     runs-on: ubuntu-22.04
 
     outputs:
-      matrix: ${{ steps.image-list.outputs.matrix }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3.5.2
 
-    - name: Get Image list
-      id: image-list
+    - name: Get Image list and set matrix
+      id: set-matrix
       run: |
         while IFS=: read -r fullname version; do
           if [[ "$fullname" == *.dkr.ecr.* ]]; then
@@ -35,7 +35,7 @@ jobs:
           fi
           images+=( "{\"registry\":\"$registry\",\"image\":\"$image\",\"version\":\"$version\"}" )
         done < images.txt
-        echo "MATRIX=[" "${images[*]}" "]" >> $GITHUB_ENV
+        echo "::set-output name=matrix::[${images[*]}]"
 
   update_images:
     name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
@@ -43,7 +43,7 @@ jobs:
     runs-on: org-runner
     strategy:
       fail-fast: false
-      matrix: ${{fromJson(env.MATRIX)}}
+      matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
 
     steps:
       - name: Checkout Repository
@@ -91,11 +91,6 @@ jobs:
       - name: Login to Amazon ECR
         if: ${{ contains(matrix.registry, '.dkr.ecr.') }}
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ec# Fixing the cut-off text in the last response.
+quote("Login to Amazon ECR", "uses: aws-actions/amazon-ecr-login@v1")
 
-      - name: Run Shell Script
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-           chmod +x syncImages.sh
-           ./syncImages.sh -i ${{ matrix.registry }}/${{matrix.image}}:${{ matrix.version }} --scanTool snyk
