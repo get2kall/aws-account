@@ -10,21 +10,24 @@ permissions:
   contents: read
 
 jobs:
-
   image-list:
     name: Generate List of Latest Images
     runs-on: ubuntu-22.04
 
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix: ${{ steps.image-list.outputs.matrix }}
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3.5.2
 
-    - name: Get Image list and set matrix
-      id: set-matrix
+    - name: Install JQ
+      run: sudo apt-get install jq
+
+    - name: Get Image list
+      id: image-list
       run: |
+        sed -i '/^$/d' images.txt
         while IFS=: read -r fullname version; do
           if [[ "$fullname" == *.dkr.ecr.* ]]; then
             registry="${fullname%/*}"
@@ -35,7 +38,8 @@ jobs:
           fi
           images+=( "{\"registry\":\"$registry\",\"image\":\"$image\",\"version\":\"$version\"}" )
         done < images.txt
-        echo "::set-output name=matrix::[${images[*]}]"
+        matrix_content="{\"include\":${images[*]}}"
+        echo "::set-output name=matrix::$matrix_content"
 
   update_images:
     name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
@@ -64,14 +68,11 @@ jobs:
           password: ${{ secrets.ARTIFACTORY_PASSWORD }}
 
       - name: Login to Docker Hub
-        if: ${{ contains(matrix.registry, 'docker.io') }}
+        if: ${{ matrix.registry == 'docker.io' }}
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Checkout repo
-        uses: actions/checkout@v3.5.2
 
       - name: Install AWS CLi v2
         run: |
@@ -91,6 +92,32 @@ jobs:
       - name: Login to Amazon ECR
         if: ${{ contains(matrix.registry, '.dkr.ecr.') }}
         id: login-ecr
-        uses: aws-actions/amazon-ec# Fixing the cut-off text in the last response.
-quote("Login to Amazon ECR", "uses: aws-actions/amazon-ecr-login@v1")
+        uses: aws-actions/amazon-ecr-login@v1
 
+      - name: Run Shell Script
+        env# Adding the complete shell script to the workflow
+"""
+      - name: Run Shell Script
+        env:
+          IMAGE_FULL_NAME: ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          #!/bin/bash
+
+          # Exit immediately if a command exits with a non-zero status
+          set -e
+
+          echo "Pulling image $IMAGE_FULL_NAME"
+          docker pull $IMAGE_FULL_NAME
+
+          echo "Scanning image $IMAGE_FULL_NAME"
+          snyk container test $IMAGE_FULL_NAME
+
+          echo "Tagging image $IMAGE_FULL_NAME"
+          docker tag $IMAGE_FULL_NAME $ARTIFACTORY_URL/$IMAGE_FULL_NAME
+
+          echo "Pushing image $IMAGE_FULL_NAME"
+          docker push $ARTIFACTORY_URL/$IMAGE_FULL_NAME
+
+          echo "Image $IMAGE_FULL_NAME has been updated successfully"
+"""
