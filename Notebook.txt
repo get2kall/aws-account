@@ -34,3 +34,11 @@ json_matrix = json.dumps({"include": matrix})
 
 # Print JSON matrix as an output variable
 print(f"::set-output name=matrix::{json_matrix}")
+
+
+
+content=$(cat images.txt)
+json_content=$(jq -R -s -c 'split("\n")[:-1] | map(split(":")) | map({registry: (.[0]|split("/"))[0], owner: if (.[0]|split("/"))[1] then (.[0]|split("/"))[1] else null end, image: .[1], version: .[2]})' <<< "$content")
+json_content="{\"include\":$json_content}"
+echo $json_content
+echo "matrix=$json_content" >> $GITHUB_OUTPUT
