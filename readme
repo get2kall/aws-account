@@ -1,0 +1,119 @@
+Docker Image Sync GitHub Actions Workflow
+This repository contains a GitHub Actions workflow that automates the process of synchronizing Docker images from a source registry to a target registry, and performing a Snyk scan on the images. It is designed to be used with an image list file (images.txt) that specifies which images to sync.
+
+Workflow Overview
+The workflow is defined in the .github/workflows/sync.yml file. It consists of two jobs:
+
+Generate List of Latest Images: This job reads the images.txt file, removes any empty lines, and then converts each line into a JSON object with registry, image, and tag properties. It then outputs a matrix of these JSON objects for use in the next job.
+
+Update Images: This job runs once for each item in the matrix from the previous job. It:
+
+Checks out the repository
+Installs Snyk
+Logs in to Artifactory and Docker Hub
+Installs AWS CLI v2 and configures AWS credentials
+Logs in to Amazon ECR
+Runs a shell script that pulls the image, performs a Snyk scan, and then pushes the image to Artifactory
+Here are some key code snippets from the workflow:
+
+# Job to generate list of latest images
+image-list:
+  name: Generate List of Latest Images
+  runs-on: ubuntu-22.04
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3.5.2
+    - name: Install JQ
+      run: sudo apt-get install jq
+    - name: Get Image list
+      id: image-list
+      run: |
+        sed -i '/^$/d' images.txt
+        content=$(cat images.txt)
+        json_content=""
+        while IFS= read -r line; do
+            if [[ $line == *":"* ]]; then
+                IFS=':' read -r fullname version <<< "$line"
+                IFS='/' read -r registry image <<< "$fullname"
+                json_content+="{\"registry\": \"$registry\", \"image\": \"$image\", \"version\": \"$version\"},"
+            fi
+        done <<< "$content"
+        json_content="[${json_content%?}]"
+        json_content="{\"include\":$json_content}"
+        echo $json_content
+        echo "matrix=$json_content" >> $GITHUB_ENV
+
+
+
+
+# Job to update images
+update_images:
+  name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
+  needs: image-list
+  runs-on: org-runner
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3.5.2
+    - name: install snyk
+      run: |
+        curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
+        chmod 777 ./snyk
+        sudo mv ./snyk /usr/local/bin/
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    - name: Login to Artifactory
+      uses: docker/login-action@v2.1.0
+      with:
+        registry: ${{ secrets.ARTIFACTORY_URL }}
+        username: ${{ secrets.ARTIFACTORY_USERNAME }}
+        password: ${{ secrets.ARTIFACTORY_PASSWORD }}
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+   ```yaml
+    - name: Install AWS CLi v2
+      run: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip awscliv2.zip
+        sudo ./aws/install --update
+        echo "Verify aws version"
+        aws --version
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2.2.5
+      with:
+        role-to-assume: "arn:aws:iam::590360573099:role/ecr-custom-role"
+        aws-region: us-east-1
+        mask-aws-account-id: false
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    - name: Run Shell Script
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      run: |
+         chmod +x syncImages.sh
+         ./syncImages.sh -i ${{ matrix.registry }}/${{matrix.image}}:${{ matrix.version }} --scanTool snyk
+
+
+
+Setup
+To set up this workflow:
+
+Fork this repository or add the .github/workflows/sync.yml file to your existing repository.
+Create a images.txt file in your repository. This file should contain one image per line in the format registry/image:tag.
+Set up the following secrets in your repository:
+SNYK_TOKEN: Your Snyk API token.
+ARTIFACTORY_URL: The URL of your Artifactory instance.
+ARTIFACTORY_USERNAME: Your Artifactory username.
+ARTIFACTORY_PASSWORD: Your Artifactory password.
+DOCKERHUB_USERNAME: Your Docker Hub username.
+DOCKERHUB_TOKEN: Your Docker Hub token.
+AWS credentials for accessing Amazon ECR.
+Update the AWS role ARN in the Configure AWS credentials step of the update_images job if necessary.
+Usage
+To use this workflow, simply push changes to your repository. The workflow will run automatically and sync the images specified in your images.txt file.
+
+Customization
+You can customize this workflow to suit your needs by editing the .github/workflows/sync.yml file. For example, you could add more steps to the update_images job to perform additional tasks, such as sending notifications or updating a database.
