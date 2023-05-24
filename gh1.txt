@@ -1,123 +1,17 @@
-name: Docker Image
-
-on:
-  push:
-    branches:
-      - main
-
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  image-list:
-    name: Generate List of Latest Images
-    runs-on: ubuntu-22.04
-
-    outputs:
-      matrix: ${{ steps.image-list.outputs.matrix }}
-
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3.5.2
-
-    - name: Install JQ
-      run: sudo apt-get install jq
-
-    - name: Get Image list
-      id: image-list
-      run: |
-        sed -i '/^$/d' images.txt
-        while IFS=: read -r fullname version; do
-          if [[ "$fullname" == *.dkr.ecr.* ]]; then
-            registry="${fullname%/*}"
-            image="${fullname##*/}"
-          else
-            registry="${fullname%%/*}"
-            image="${fullname#*/}"
-          fi
-          images+=( "{\"registry\":\"$registry\",\"image\":\"$image\",\"version\":\"$version\"}" )
-        done < images.txt
-        matrix_content="{\"include\":${images[*]}}"
-        echo "::set-output name=matrix::$matrix_content"
-
-  update_images:
-    name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
-    needs: image-list
-    runs-on: org-runner
-    strategy:
-      fail-fast: false
-      matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3.5.2
-      - name: install snyk
-        run: |
-          curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
-          chmod 777 ./snyk
-          sudo mv ./snyk /usr/local/bin/
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Login to Artifactory
-        uses: docker/login-action@v2.1.0
-        with:
-          registry: ${{ secrets.ARTIFACTORY_URL }}
-          username: ${{ secrets.ARTIFACTORY_USERNAME }}
-          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
-
-      - name: Login to Docker Hub
-        if: ${{ matrix.registry == 'docker.io' }}
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Install AWS CLi v2
-        run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install --update
-          echo "Verify aws version"
-          aws --version
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: "arn:aws:iam::590360573099:role/ecr-custom-role"
-          aws-region: us-east-1
-          mask-aws-account-id: false
-
-      - name: Login to Amazon ECR
-        if: ${{ contains(matrix.registry, '.dkr.ecr.') }}
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Run Shell Script
-        env# Adding the complete shell script to the workflow
-"""
-      - name: Run Shell Script
-        env:
-          IMAGE_FULL_NAME: ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          #!/bin/bash
-
-          # Exit immediately if a command exits with a non-zero status
-          set -e
-
-          echo "Pulling image $IMAGE_FULL_NAME"
-          docker pull $IMAGE_FULL_NAME
-
-          echo "Scanning image $IMAGE_FULL_NAME"
-          snyk container test $IMAGE_FULL_NAME
-
-          echo "Tagging image $IMAGE_FULL_NAME"
-          docker tag $IMAGE_FULL_NAME $ARTIFACTORY_URL/$IMAGE_FULL_NAME
-
-          echo "Pushing image $IMAGE_FULL_NAME"
-          docker push $ARTIFACTORY_URL/$IMAGE_FULL_NAME
-
-          echo "Image $IMAGE_FULL_NAME has been updated successfully"
-"""
+- name: Get Image list
+  id: image-list
+  run: |
+    sed -i '/^$/d' images.txt
+    content=$(cat images.txt)
+    json_content=""
+    while IFS= read -r line; do
+        if [[ $line == *":"* ]]; then
+            IFS=':' read -r fullname version <<< "$line"
+            IFS='/' read -r registry image <<< "$fullname"
+            json_content+="{\"registry\": \"$registry\", \"image\": \"$image\", \"version\": \"$version\"},"
+        fi
+    done <<< "$content"
+    json_content="[${json_content%?}]"
+    json_content="{\"include\":$json_content}"
+    echo $json_content
+    echo "matrix=$json_content" >> $GITHUB_ENV
