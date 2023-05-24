@@ -117,3 +117,76 @@ To use this workflow, simply push changes to your repository. The workflow will 
 
 Customization
 You can customize this workflow to suit your needs by editing the .github/workflows/sync.yml file. For example, you could add more steps to the update_images job to perform additional tasks, such as sending notifications or updating a database.
+
+
+Update Images
+This job runs on an org-runner. It needs the image-list job to have completed successfully. It updates each Docker image and runs a Snyk scan on it.
+
+update_images:
+  name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
+  needs: image-list
+  runs-on: org-runner
+  strategy:
+    fail-fast: false
+    matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
+
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3.5.2
+
+    - name: install snyk
+      run: |
+        curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
+        chmod 777 ./snyk
+        sudo mv ./snyk /usr/local/bin/
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    - name: Login to Artifactory
+      uses: docker/login-action@v2.1.0
+      with:
+        registry: ${{ secrets.ARTIFACTORY_URL }}
+        username: ${{ secrets.ARTIFACTORY_USERNAME }}
+        password: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+# Let's convert the remaining parts of the README to markdown.
+{
+  "role": "markdown",
+  "content": """
+      with:
+        registry: docker.io
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
+        
+    - name: Pull Image
+      run: docker pull ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
+
+    - name: Update Image
+      run: |
+        docker tag ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }} ${{ secrets.ARTIFACTORY_URL }}/${{ matrix.image }}:${{ matrix.version }}
+        docker push ${{ secrets.ARTIFACTORY_URL }}/${{ matrix.image }}:${{ matrix.version }}
+
+    - name: Run Snyk Scan
+      run: snyk test --docker ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }} --file=Dockerfile
+
+
+
+
+
+Secrets
+This workflow requires several secrets for authentication purposes. You can create these secrets in your GitHub repository's settings.
+
+SNYK_TOKEN: Your Snyk token for running security scans.
+ARTIFACTORY_URL: The URL of your Artifactory registry.
+ARTIFACTORY_USERNAME: Your username for the Artifactory registry.
+ARTIFACTORY_PASSWORD: Your password for the Artifactory registry.
+DOCKERHUB_USERNAME: Your username for Docker Hub.
+DOCKERHUB_PASSWORD: Your password for Docker Hub.
+
+
+
+Conclusion
+This GitHub Actions workflow provides a streamlined way to manage Docker images. With automated processes for generating a list of latest images, updating images, and running security scans, you can efficiently manage your Docker image lifecycle directly from GitHub.
+
