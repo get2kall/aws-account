@@ -6,70 +6,41 @@ on:
       - main
 
 jobs:
-  prepare:
+  update_images:
+    name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      snyk: ${{ steps.set-flags.outputs.snyk }}
-      wiz: ${{ steps.set-flags.outputs.wiz }}
-      aws: ${{ steps.set-flags.outputs.aws }}
+    strategy:
+      matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
       - name: Get Image list
-        id: set-matrix
+        id: image-list
         run: |
           sed -i '/^$/d' images.txt
           content=$(cat images.txt)
           json_content=""
-          snyk="false"
-          wiz="false"
-          aws="false"
           while IFS='|' read -r line scan_tool; do
             if [[ $line == *":"* ]]; then
               IFS=':' read -r fullname version <<< "$line"
               IFS='/' read -r registry image <<< "$fullname"
               json_content+="{\"registry\": \"$registry\", \"image\": \"$image\", \"version\": \"$version\", \"scan_tool\": \"$scan_tool\"},"
-              if [[ "$scan_tool" == "snyk" ]]; then
-                snyk="true"
-              elif [[ "$scan_tool" == "wiz" ]]; then
-                wiz="true"
-              fi
-              if [[ "$registry" == "dkr.ecr" ]]; then
-                aws="true"
-              fi
             fi
           done <<< "$content"
           json_content="[${json_content%?}]"
           echo "::set-output name=matrix::$json_content"
 
-      - name: Set Flags
-        id: set-flags
-        run: |
-          echo "::set-output name=snyk::$snyk"
-          echo "::set-output name=wiz::$wiz"
-          echo "::set-output name=aws::$aws"
-
-  update_images:
-    needs: prepare
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{fromJson(needs.prepare.outputs.matrix)}}
-    steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
 
       - name: Install Snyk CLI
-        if: needs.prepare.outputs.snyk == 'true'
+        if: ${{ matrix.scan_tool == 'snyk' }}
         run: |
           curl -LO https://github.com/snyk/snyk/releases/latest/download/snyk-linux
           chmod +x snyk-linux
           sudo mv snyk-linux /usr/local/bin/snyk
 
       - name: Install Wiz CLI
-        if: needs.prepare.outputs.wiz == 'true'
+        if: ${{ matrix.scan_tool == 'wiz' }}
         run: |
           curl -sSfL https://get.wiz.io/cli.sh | sudo sh
 
@@ -86,19 +57,19 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
       - name: Install AWS CLI
-        if: needs.prepare.outputs.aws == 'true'
+        if: ${{ matrix.registry == 'dkr.ecr' }}
         run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-         Here is the continuation of the updated workflow:
-
-```yaml
           unzip awscliv2.zip
           sudo ./aws/install --update
           aws --version
 
       - name: Configure AWS credentials
-        if: needs.prepare.outputs.aws == 'true'
+        if: ${{ matrix.registry == 'dkr.ecr' }}
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
