@@ -1,84 +1,15 @@
-name: CI Workflow
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  update_images:
-    name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
-
-    steps:
-      - name: Get Image list
-        id: image-list
-        run: |
-          sed -i '/^$/d' images.txt
-          content=$(cat images.txt)
-          json_content=""
-          while IFS='|' read -r line scan_tool; do
-            if [[ $line == *":"* ]]; then
-              IFS=':' read -r fullname version <<< "$line"
-              IFS='/' read -r registry image <<< "$fullname"
-              json_content+="{\"registry\": \"$registry\", \"image\": \"$image\", \"version\": \"$version\", \"scan_tool\": \"$scan_tool\"},"
-            fi
-          done <<< "$content"
-          json_content="[${json_content%?}]"
-          echo "::set-output name=matrix::$json_content"
-
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
-      - name: Install Snyk CLI
-        if: ${{ matrix.scan_tool == 'snyk' }}
-        run: |
-          curl -LO https://github.com/snyk/snyk/releases/latest/download/snyk-linux
-          chmod +x snyk-linux
-          sudo mv snyk-linux /usr/local/bin/snyk
-
-      - name: Install Wiz CLI
-        if: ${{ matrix.scan_tool == 'wiz' }}
-        run: |
-          curl -sSfL https://get.wiz.io/cli.sh | sudo sh
-
-      - name: Login to Artifactory
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ secrets.ARTIFACTORY_URL }}
-          username: ${{ secrets.ARTIFACTORY_USERNAME }}
-          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Checkout repo
-        uses: actions/checkout@v2
-
-      - name: Install AWS CLI
-        if: ${{ matrix.registry == 'dkr.ecr' }}
-        run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install --update
-          aws --version
-
-      - name: Configure AWS credentials
-        if: ${{ matrix.registry == 'dkr.ecr' }}
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Run Shell Script
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          chmod +x syncImages.sh
-          ./syncImages.sh -i ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }} --scanTool ${{ matrix.scan_tool }}
+[
+  {
+    "registry": "docker.io",
+    "image": "redis",
+    "version": "latest",
+    "scanTool": "wizcli"
+  },
+  {
+    "registry": "docker.io",
+    "image": "postgres",
+    "version": "alpine3.18",
+    "scanTool": "snyk"
+  },
+ 
+]
