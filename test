@@ -1,15 +1,8 @@
-[
-  {
-    "registry": "docker.io",
-    "image": "redis",
-    "version": "latest",
-    "scanTool": "wizcli"
-  },
-  {
-    "registry": "docker.io",
-    "image": "postgres",
-    "version": "alpine3.18",
-    "scanTool": "snyk"
-  },
- 
-]
+- name: Check Result and Update Files
+        run: |
+          if [ $? -eq 0 ]
+          then
+            echo "${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}" >> success.txt
+          else
+            echo "${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}" >> failure.txt
+          fi
