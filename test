@@ -33,3 +33,45 @@ jobs:
           git add success.txt failure.txt
           git commit -m "Update success and failure logs"
           git push origin HEAD:develop
+
+
+
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.9
+
+      - name: Execute sync and log result
+        run: |
+          echo "Installing necessary Python modules"
+          python -m pip install --upgrade pip
+          pip install awscli
+          echo "Running script"
+          python -m pip install --upgrade pip
+          echo '''
+          import subprocess
+          from datetime import datetime
+
+          matrix_registry = "${{ matrix.registry }}"
+          matrix_image = "${{ matrix.image }}"
+          matrix_version = "${{ matrix.version }}"
+
+          sync_command = f"./syncImages.sh -i {matrix_registry}/{matrix_image}:{matrix_version} --scanTool snyk"
+
+          if subprocess.run(sync_command, shell=True, check=True).returncode == 0:
+              with open('success.txt', 'a') as f:
+                  f.write(f"Sync for image {matrix_registry}/{matrix_image}:{matrix_version} succeeded at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+          else:
+              with open('failure.txt', 'a') as f:
+                  f.write(f"Sync for image {matrix_registry}/{matrix_image}:{matrix_version} failed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+          ''' > sync_and_log.py
+          python sync_and_log.py
+          
+      - name: Commit results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "Update logs"
+          git push
