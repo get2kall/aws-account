@@ -1,8 +1,35 @@
-- name: Check Result and Update Files
+jobs:
+  update_images:
+    name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
+    needs: image-list
+    runs-on: org-runner
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
+
+    steps:
+      # ... previous steps ...
+
+      - name: Create success and failure files if they do not exist
         run: |
-          if [ $? -eq 0 ]
-          then
-            echo "${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}" >> success.txt
+          touch success.txt
+          touch failure.txt
+
+      - name: Run Shell Script
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          chmod +x syncImages.sh
+          if ./syncImages.sh -i ${{ matrix.registry }}/${{matrix.image}}:${{ matrix.version }} --scanTool snyk; then
+            echo "Sync for image ${{ matrix.registry }}/${{matrix.image}}:${{ matrix.version }} succeeded at $(date)" >> success.txt
           else
-            echo "${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}" >> failure.txt
+            echo "Sync for image ${{ matrix.registry }}/${{matrix.image}}:${{ matrix.version }} failed at $(date)" >> failure.txt
           fi
+
+      - name: Commit and push success and failure files
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add success.txt failure.txt
+          git commit -m "Update success and failure logs"
+          git push origin HEAD:develop
