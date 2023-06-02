@@ -147,11 +147,19 @@ jobs:
       - name: Extract Registry Names
         id: extract-registry
         run: |
-          echo "Registry,Image,Version,Scan Tool,Timestamp" > registry-names.csv
-          grep ',success,' result-*.txt | sed 's/result-\(.*\).txt:.*/\1/' | awk -F',' '{print $1,$2,$3,$4,$5}' OFS=',' >> registry-names.csv
+          echo "Registry,Image,Version,Scan Tool,Timestamp" > success.csv
+          grep ',success,' result-*.txt | awk -F',' '{print $1,$2,$3,$4,$5}' OFS=',' >> success.csv
+          echo "Registry,Image,Version,Scan Tool,Timestamp" > failure.csv
+          grep ',failure,' result-*.txt | awk -F',' '{print $1,$2,$3,$4,$5}' OFS=',' >> failure.csv
 
-      - name: Upload registry names as artifact
+      - name: Upload registry names as artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: registry-names
-          path: registry-names.csv
+          name: success-result
+          path: success.csv
+
+      - name: Upload failure names as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: failure-result
+          path: failure.csv
