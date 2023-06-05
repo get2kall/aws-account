@@ -2,7 +2,7 @@
 
 function print_help {
   echo
-  echo "usage: $0 -i,--imageUrl <imageUrl> -f,--file <file>,-s, --scanTool <Scan Tool>, -l,--thresholdLevel <Scan Threshold Level>,-o,--operation <operation>, --platform <platform>, -h,--help"
+  echo "usage: $0 -i,--imageUrl <imageUrl> -f,--file <file>,-s, --scanTool <Scan Tool> -l,--thresholdLevel <Scan Threshold Level> -o,--operation <operation> --platform <platform> -h,--help"
   echo
   echo "An utility script to download docker images and push them into massmutual private repository."
   echo
@@ -12,7 +12,7 @@ function print_help {
   echo "--platform (Optional) Specify platform information for the image. Default is linux/amd64."
   echo "--file (Optional) Specify the filename that contains the list of image urls."
   echo "       If both file and imageUrl are not specified, script will automatically look for a file named imageSyncRequest-YYYYMMDD.txt"
-  echo "--scanTool (Optional) Specify a value a tool that should be used for scanning. Allowed values are either wizcli, snyk. Default is wizcli."
+  echo "--scanTool (Optional) Specify a value a tool that should be used for scanning. Allowed values are either wizcli, snyk. Default is snyk."
   echo "--thresholdLevel (Optional) Specify a value for Snyk Threshold Level. Default is Critical."
   echo "--operation (Optional) Specify a value for operation to be performed. Supported values are Build, Scan, Push. Default is Push, which performs all operations."
   echo
@@ -24,7 +24,8 @@ file=""
 defaultPlatform="linux/amd64"
 defaultSnykThresholdLevel="critical"
 operation="Push"
-defaultScanningTool="wizcli"
+defaultScanningTool="snyk"
+mm_repository_name="docker"
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -103,17 +104,17 @@ if [[ ! "${operation}" == "Build" && ! "${operation}" == "Scan" && ! "${operatio
     echo -e "\033[1;31m!!! Incorrect value for operation parameter !!! Supported Values are Build, Scan Or Push. ${colorOff}"
     print_help
     exit
-fi
+fi;
 
-dockerPath=$(which docker)
+dockerPath=$(command -v docker)
 if [[ -z "$dockerPath" ]]; then
     echo "!!! Docker not found. Please install docker and try again !!!"
     exit
-fi
+fi;
 
 wizCliPath=""
 if [[ "${defaultScanningTool}" == "wizcli" ]]; then
-    wizCliPath=$(which wizcli)
+    wizCliPath=$(command -v wizcli)
     if [[ -z "$wizCliPath" ]]; then
         echo "!!! Wiz CLI not found. Please install Wiz CLI, Authenticate and try again !!!"
         echo "*** Go to https://docs.wiz.io/wiz-docs/docs/set-up-wiz-cli and follow instruction for setup instructions."
@@ -124,23 +125,23 @@ if [[ "${defaultScanningTool}" == "wizcli" ]]; then
             echo "!!! Wiz CLI is not yet authenticated. Please authenticate to proceed !!!"
             exit
         fi
-    fi
-fi
+    fi;
+fi;
 
 snykPath=""
 if [[ "${defaultScanningTool}" == "snyk" ]]; then
-    snykPath=$(which snyk)
+    snykPath=$(command -v snyk)
     if [[ -z "$snykPath" ]]; then
         echo "!!! Snyk CLI not found. Please install Snyk CLI and try again !!!"
         exit
-    fi
-fi
+    fi;
+fi;
 
 dockerMsg=$(docker ps)
 if [[ ! "$dockerMsg" =~ "CONTAINER" ]]; then
     echo "!!! Trouble running Docker commands. Cannot continue !!!"
     exit
-fi
+fi;
 
 if [[ ! -d "./docker-build-tmp" ]]; then
     mkdir ./docker-build-tmp
@@ -156,7 +157,7 @@ else
     if [[ ! -z "${imageRef}" ]]; then
         echo ${imageRef} > ./docker-build-tmp/imageList.txt
     fi
-fi
+fi;
 
 if [[ ! -f "./docker-build-tmp/imageList.txt" ]]; then
     lookupFile="./imageSyncRequest-"$(date  +%Y%m%d)".txt"
@@ -165,10 +166,21 @@ if [[ ! -f "./docker-build-tmp/imageList.txt" ]]; then
     else
         echo "!!! Missing image sync request file [$lookupFile]. Cannot continue !!!"
     fi
-fi
+fi;
+
+registryUrl=${MM_REGISTRY_URL}
+if [[ -z ${registryUrl} ]]; then
+    registryUrl="artifactory.awsmgmt.massmutual.com"
+fi;
+
+if [[ ! -z "${mm_repository_name}" ]]; then
+    repositoryName=${mm_repository_name}
+else
+    repositoryName="docker"
+fi;
 
 if [[  -f "./docker-build-tmp/imageList.txt" ]]; then
-    while IFS= read -r imageUrl; do
+    for imageUrl in $(cat "./docker-build-tmp/imageList.txt" ); do
         errorCode=0
         isProceed=false
 
@@ -183,51 +195,40 @@ if [[  -f "./docker-build-tmp/imageList.txt" ]]; then
 
         if [ "${imageSourceName}" = "${imageSourceTag}" ]; then
             imageSourceTag="latest"
-        fi
+        fi;
 
         if [ "${imageSourceRegistry}" = "${imageUrl}" ]; then
             imageRegistry=$imageSourceName
-        fi
+        fi;
 
         imageSourceRepository=$(echo $imageUrl | cut -d'/' -f2- | sed 's,/[^/]*$,,')
-        
         if [ "${imageSourceRepository}" = "${imageInfo}" ]; then
             imageSourceRepository=""
-        fi
+        fi;
 
-        imageDesitination="artifactory.awsmgmt.massmutual.com/docker"
-
+        imageDesitination="${registryUrl}/${repositoryName}"
         if [[ ! -z ${imageSourceRepository} ]]; then
             imageDesitination+=/${imageSourceRepository}
-        fi
-
+        fi;
         imageDesitination+=/${imageSourceName}:${imageSourceTag}
 
-        if [[ "${imageSourceRegistry}" =~ "dkr.ecr" &&
-              "${imageSourceRegistry}" =~ "amazonaws.com" ]]; then
-
-            awsResponseMsg=$(aws sts get-caller-identity > log.txt 2>&1)
-
-            if [[ -f "./log.txt" ]]; then
-                awsResponseMsg=$(cat log.txt | sed '/^$/d')
-                rm -f "./log.txt"
-            fi
-
-            if [[ "$awsResponseMsg" =~ "An error occurred" ]]; then
+        if [[ "${imageSourceRegistry}" =~ "dkr.ecr" && "${imageSourceRegistry}" =~ "amazonaws.com" ]]; then
+            awsResponseMsg=$(aws sts get-caller-identity > /dev/null 2>&1)
+            if [[ $? -ne 0 ]]; then
                 echo -e "\033[0;33m!!! Unable to login into AWS account. Skipping request for image [${imageUrl}] !!!\033[0m"
-                continue
+                continue;
             fi
 
             dockerMsg=$(aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 755674844232.dkr.ecr.us-east-1.amazonaws.com)
             if [[ "$dockerMsg" =~ "Login Succeeded" ]]; then
-                isProceed=true
+                isProceed=true;
                 echo "Docker login successful, proceeding..."
             else
                 echo -e "\033[0;33m!!! Unable to login into docker. Skipping request for [${imageUrl}]. Error: [$dockerMsg] !!!\033[0m"
-                continue
+                continue;
             fi
         else
-            isProceed=true
+            isProceed=true;
         fi
 
         if [[ ${isProceed} ]] && [[ "${operation}" == "Build" || "${operation}" == "Scan" || "${operation}" == "Push" ]]; then
@@ -239,8 +240,7 @@ if [[  -f "./docker-build-tmp/imageList.txt" ]]; then
 
             if [[ ! -z ${imageSourceRepository} ]]; then
                 pullImage+=/"${imageSourceRepository}"
-            fi
-
+            fi;
             pullImage+=/"${imageSourceName}:${imageSourceTag}"
 
             cat <<EOF > ./docker-build-tmp/dockerfile
@@ -257,61 +257,55 @@ EOF
             echo "Docker build for image [${imageDesitination}] using [${pullImage}] as base image is complete. Return code [${errorCode}]."
 
             if (( $errorCode == 0 )) && [[ "${operation}" == "Scan" || "${operation}" == "Push" ]]; then
+
                 if [[ "${defaultScanningTool}" == "wizcli" ]]; then
                     echo
                     echo "Triggering Wiz Vulnerability Scanning for image [${imageDesitination}] with severity-threshold value [$defaultSnykThresholdLevel] ..."
                     echo
-                    ${wizCliPath} docker scan --image ${imageDesitination}
+                    ${wizCliPath}  docker scan --image ${imageDesitination}
 
                     errorCode=$?
                     echo "Wiz Vulnerability Scanning for image [${imageDesitination}] with severity-threshold value [$defaultSnykThresholdLevel] is complete. Return code [${errorCode}]."
-                    
-                    if [[ "$errorCode" -ne 0 ]]; then
-                        echo -e "\033[47m\033[1;31m!!! ${defaultSnykThresholdLevel} vulnerability found for [${pullImage}]. Exiting... !!!\033[0m"
-                        echo
-                        exit 1
-                    fi
-                fi
-
+                fi;
                 if [[ "${defaultScanningTool}" == "snyk" ]]; then
                     echo
                     echo "Triggering Snyk Vulnerability Scanning for image [${imageDesitination}] with severity-threshold value [$defaultSnykThresholdLevel] ..."
                     echo
-                    ${snykPath} container test --insecure ${imageDesitination} --fail-fast --severity-threshold=$defaultSnykThresholdLevel
+                    ${snykPath}  container test --insecure ${imageDesitination} --fail-fast --severity-threshold=$defaultSnykThresholdLevel
 
                     errorCode=$?
                     echo "Snyk Vulnerability Scanning for image [${imageDesitination}] with severity-threshold value [$defaultSnykThresholdLevel] is complete. Return code [${errorCode}]."
-                    
-                    if [[ "$errorCode" -ne 0 ]]; then
-                        echo -e "\033[47m\033[1;31m!!! ${defaultSnykThresholdLevel} vulnerability found for [${pullImage}]. Exiting... !!!\033[0m"
+                fi;
+
+                if (( $errorCode == 0 )); then
+                    if [[ "${operation}" == "Push" ]]; then
                         echo
-                        exit 1
-                    fi
-                fi
-
-                if (( $errorCode == 0 )) && [[ "${operation}" == "Push" ]]; then
-                    echo
-                    echo "Pushing image ${imageDesitination} ..."
-                    echo
-                    docker push ${imageDesitination}
-
-                    errorCode=$?
-
-                    if (( $errorCode == 0 )); then
-                        echo -e "\033[0;32mImage [${imageUrl}] has been successfully published into massmutual private repository...\033[0m"
+                        echo "Pushing image ${imageDesitination} ..."
                         echo
-                    fi
+                        docker push ${imageDesitination}
+
+                        errorCode=$?
+
+                        if (( $errorCode == 0 )); then
+                            echo -e "\033[0;32mImage [${imageUrl}] has been successfully published into massmutual private repository...\033[0m"
+                            echo
+                        fi;
+                    else
+                        echo -e "\033[0;32mImage [${imageUrl}] has been successfully pulled and scanned. No vulnerabilities found at ${defaultSnykThresholdLevel} level...\033[0m"
+                        echo
+                    fi;
                 else
                     echo -e "\033[47m\033[1;31m!!! ${defaultSnykThresholdLevel} vulnerability found for [${pullImage}]. Image will not be processed for repository push !!!\033[0m"
                     echo
-                fi
-            fi
-        fi
-    done < "./docker-build-tmp/imageList.txt"
+                    exit 1;
+                fi;
+            fi;
+        fi;
+    done;
 else
-    print_help
-fi
+    print_help;
+fi;
 
 if [[ -d ./docker-build-tmp ]]; then
     rm -rf ./docker-build-tmp
-fi
+fi;
