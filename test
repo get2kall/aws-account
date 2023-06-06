@@ -1,42 +1,33 @@
-import os
-import pymysql
-import datetime
+import pymysql.cursors
 import sys
-
-# Read secrets from environment variables
-rds_endpoint = os.environ['RDS_ENDPOINT']
-db_username = os.environ['DB_USERNAME']
-db_password = os.environ['DB_PASSWORD']
-db_name = os.environ['DB_NAME']
+import os
 
 def insert_data(registry, image, version, scan_tool, status):
+    host = os.environ['RDS_HOST']
+    user = os.environ['RDS_USER']
+    password = os.environ['RDS_PASSWORD']
+    database = os.environ['RDS_DATABASE']
+
     connection = pymysql.connect(
-        host=rds_endpoint,
-        user=db_username,
-        password=db_password,
-        database=db_name
+        host=host,
+        user=user,
+        password=password,
+        database=database,
+        cursorclass=pymysql.cursors.DictCursor
     )
 
-    
+    try:
+        with connection.cursor() as cursor:
+            sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
+            cursor.execute(sql, (registry, image, version, scan_tool, status))
+        connection.commit()
+    finally:
+        connection.close()
 
-    cursor = connection.cursor()
-
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    sql = "INSERT INTO your_table_name (registry, image, version, scan_tool, status, timestamp) " \
-          "VALUES (%s, %s, %s, %s, %s, %s)"
-    values = (registry, image, version, scan_tool, status, timestamp)
-    cursor.execute(sql, values)
-    connection.commit()
-
-    cursor.close()
-    connection.close()
-
-# Read command line arguments
-registry = sys.argv[1]
-image = sys.argv[2]
-version = sys.argv[3]
-scan_tool = sys.argv[4]
-status = sys.argv[5]
-
-# Insert data into the database
-insert_data(registry, image, version, scan_tool, status)
+if __name__ == "__main__":
+    registry = sys.argv[1]
+    image = sys.argv[2]
+    version = sys.argv[3]
+    scan_tool = sys.argv[4]
+    status = sys.argv[5]
+    insert_data(registry, image, version, scan_tool, status)
