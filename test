@@ -1,165 +1,42 @@
-name: Docker Image
+import os
+import pymysql
+import datetime
+import sys
 
-on:
-  push:
-    branches:
-      - develop
+# Read secrets from environment variables
+rds_endpoint = os.environ['RDS_ENDPOINT']
+db_username = os.environ['DB_USERNAME']
+db_password = os.environ['DB_PASSWORD']
+db_name = os.environ['DB_NAME']
 
-permissions:
-  id-token: write
-  contents: write
+def insert_data(registry, image, version, scan_tool, status):
+    connection = pymysql.connect(
+        host=rds_endpoint,
+        user=db_username,
+        password=db_password,
+        database=db_name
+    )
 
-jobs:
-  image-list:
-    name: Generate List of Latest Images
-    runs-on: ubuntu-22.04
+    
 
-    outputs:
-      matrix: ${{ steps.image-list.outputs.matrix }}
+    cursor = connection.cursor()
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3.5.2
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sql = "INSERT INTO your_table_name (registry, image, version, scan_tool, status, timestamp) " \
+          "VALUES (%s, %s, %s, %s, %s, %s)"
+    values = (registry, image, version, scan_tool, status, timestamp)
+    cursor.execute(sql, values)
+    connection.commit()
 
-      - name: Install JQ
-        run: sudo apt-get install jq -y
+    cursor.close()
+    connection.close()
 
-      - name: Get Image list
-        id: image-list
-        run: |
-          content=$(jq -c . < images.json)
-          content="{\"include\":$content}"
-          echo $content
-          echo "matrix=$content" >> $GITHUB_ENV
+# Read command line arguments
+registry = sys.argv[1]
+image = sys.argv[2]
+version = sys.argv[3]
+scan_tool = sys.argv[4]
+status = sys.argv[5]
 
-  update_images:
-    name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
-    needs: image-list
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3.5.2
-
-      - name: Install Snyk
-        if: ${{ matrix.scanTool == 'snyk' }}
-        run: |
-          curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
-          chmod 777 ./snyk
-          sudo mv ./snyk /usr/local/bin/
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Install Wiz
-        if: ${{ matrix.scanTool == 'wizcli' }}
-        env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
-        run: |
-          curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli
-          chmod +x wizcli
-          sudo mv wizcli /usr/local/bin/
-          wizcli auth --id $WIZ_CLIENT_ID --secret $WIZ_CLIENT_SECRET
-
-      - name: Login to Artifactory
-        uses: docker/login-action@v2.1.0
-        with:
-          registry: ${{ secrets.ARTIFACTORY_URL }}
-          username: ${{ secrets.ARTIFACTORY_USERNAME }}
-          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Checkout Repository
-        uses: actions/checkout@v3.5.2
-        with:
-          ref: develop
-
-      - name: Install AWS CLI v2
-        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
-        run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install --update
-          echo "Verify AWS version"
-          aws --version
-
-      - name: Configure AWS credentials
-        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: "arn:aws:iam::590360573099:role/ecr-custom-role"
-          aws-region: us-east-1
-          mask-aws-account-id: false
-
-      - name: Login to Amazon ECR
-        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Checkout Repository
-        uses: actions/checkout@v3.5.2
-        with:
-          ref: develop
-
-      - name: Run Shell Script
-        id: run_script
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
-        run: |
-          chmod +x syncImages.sh
-          if ./syncImages.sh -i ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }} --scanTool snyk; then
-            echo "${{ matrix.registry }},${{ matrix.image }},${{ matrix.version }},snyk,$(date)" >> result-${{ matrix.image }}.txt
-          else
-            echo "${{ matrix.registry }},${{ matrix.image }},${{ matrix.version }},snyk,$(date)" >> result-${{ matrix.image }}.txt
-          fi
-
-      - name: Upload result files as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: scan-result
-          path: result-*.txt
-
-  collect-result:
-    needs: update_images
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3.5.2
-        with:
-          ref: develop
-
-      - name: Download result files as artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: scan-result
-          path: .
-
-      - name: Extract Registry Names
-        id: extract-registry
-        run: |
-          echo "Registry,Image,Version,Scan Tool,Timestamp" > success.csv
-          grep ',success,' result-*.txt | awk -F',' '{print $1,$2,$3,$4,$5}' OFS=',' >> success.csv
-          echo "Registry,Image,Version,Scan Tool,Timestamp" > failure.csv
-          grep ',failure,' result-*.txt | awk -F',' '{print $1,$2,$3,$4,$5}' OFS=',' >> failure.csv
-
-      - name: Upload registry names as artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: success-result
-          path: success.csv
-
-      - name: Upload failure names as artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: failure-result
-          path: failure.csv
+# Insert data into the database
+insert_data(registry, image, version, scan_tool, status)
