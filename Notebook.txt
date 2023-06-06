@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       - name: Install JQ
         run: sudo apt-get install jq -y
@@ -29,7 +29,6 @@ jobs:
         run: |
           content=$(jq -c . < images.json)
           content="{\"include\":$content}"
-          echo $content
           echo "matrix=$content" >> $GITHUB_ENV
 
   update_images:
@@ -38,74 +37,31 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
+      matrix: ${{ fromJson(needs.image-list.outputs.matrix) }}
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       - name: Install Snyk
         if: ${{ matrix.scanTool == 'snyk' }}
         run: |
           curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
-          chmod 777 ./snyk
-          sudo mv ./snyk /usr/local/bin/
+          chmod +x snyk
+          sudo mv snyk /usr/local/bin/
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       - name: Install Wiz
         if: ${{ matrix.scanTool == 'wizcli' }}
-        env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
         run: |
           curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli
           chmod +x wizcli
           sudo mv wizcli /usr/local/bin/
           wizcli auth --id $WIZ_CLIENT_ID --secret $WIZ_CLIENT_SECRET
-
-      - name: Login to Artifactory
-        uses: docker/login-action@v2.1.0
-        with:
-          registry: ${{ secrets.ARTIFACTORY_URL }}
-          username: ${{ secrets.ARTIFACTORY_USERNAME }}
-          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Install AWS CLI v2
-        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
-        run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install --update
-          echo "Verify AWS version"
-          aws --version
-
-      - name: Configure AWS credentials
-        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: "arn:aws:iam::590360573099:role/ecr-custom-role"
-          aws-region: us-east-1
-          mask-aws-account-id: false
-
-      - name: Login to Amazon ECR
-        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-        with:
-          ref: develop
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
 
       - name: Run Shell Script
         id: run_script
@@ -124,9 +80,9 @@ jobs:
           fi
 
       - name: Upload result files as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
-          name: scan-result
+          name: scan-results
           path: result-*.txt
 
   collect-result:
@@ -134,19 +90,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       - name: Download result files as artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
-          name: scan-result
+          name: scan-results
           path: .
 
       - name: Execute Python script
         uses: actions/setup-python@v2
         with:
           python-version: '3.x'
+
       - name: Install dependencies
         run: pip install pymysql
+
       - name: Execute Python script to process results
         run: python process_results.py
