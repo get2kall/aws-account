@@ -1,8 +1,8 @@
-#! /bin/bash
+<div><br class="Apple-interchange-newline">#! /bin/bash
 
 function print_help {
   echo
-  echo "usage: $0 -i,--imageUrl <imageUrl> -f,--file <file>,-s, --scanTool <Scan Tool>, -l,--thresholdLevel <Scan Threshold Level>,-o,--operation <operation>, --platform <platform>, --repositoryName <repositoryName>, -h,--help"
+  echo "usage: $0 -i,--imageUrl <imageUrl> -f,--file <file>,-s, --scanTool <Scan Tool>, -l,--thresholdLevel <Scan Threshold Level>,-o,--operation <operation>, --platform <platform>, -h,--help"
   echo
   echo "An utility script to download docker images and push them into massmutual private repository."
   echo
@@ -15,10 +15,10 @@ function print_help {
   echo "--scanTool (Optional) Specify a value a tool that should be used for scanning. Allowed values are either wizcli, snyk. Default is snyk."
   echo "--thresholdLevel (Optional) Specify a value for Snyk Threshold Level. Default is Critical."
   echo "--operation (Optional) Specify a value for operation to be performed. Supported values are Build, Scan, Push. Default is Push, which performs all operations."
-  echo "--repositoryName (Optional) Specify the name of the repository. Default is 'docker'."
+  echo "--repositoryName (Optional) Specify the name of the repository in JFrog where the image will be pushed."
+
   echo
 }
-
 colorOff='\033[0m'
 imageRef=""
 file=""
@@ -26,8 +26,6 @@ defaultPlatform="linux/amd64"
 defaultSnykThresholdLevel="critical"
 operation="Push"
 defaultScanningTool="snyk"
-repositoryName="docker"
-
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
@@ -95,16 +93,17 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
-    --repositoryName)
+
+      -r | --repositoryName)
       repositoryName=$2
       if [[ -z "$2" ]]; then
-        echo -e "\033[1;31m!!! Missing value for repository name parameter !!!${colorOff}"
+        echo -e "\033[1;31m!!! Missing value for repositoryName parameter !!!${colorOff}"
         print_help
         exit
       fi
       shift
       shift
-      ;;
+      ;;    
     *)                   # unknown option
       shift              # past argument
       ;;
@@ -117,7 +116,7 @@ if [[ ! "${operation}" == "Build" && ! "${operation}" == "Scan" && ! "${operatio
     exit
 fi;
 
-dockerPath=$(command -v docker)
+dockerPath=$(which docker)
 if [[ -z "$dockerPath" ]]; then
     echo "!!! Docker not found. Please install docker and try again !!!"
     exit
@@ -126,7 +125,7 @@ fi;
 #echo "defaultScanningTool: ${defaultScanningTool}"
 wizCliPath=""
 if [[ "${defaultScanningTool}" == "wizcli" ]]; then
-    wizCliPath=$(command -v wizcli)
+    wizCliPath=$(which wizcli)
     if [[ -z "$wizCliPath" ]]; then
         echo "!!! Wiz CLI not found. Please install Wiz CLI, Authenticate and try again !!!"
         echo "*** Go to https://docs.wiz.io/wiz-docs/docs/set-up-wiz-cli and follow instruction for setup instructions."
@@ -143,7 +142,7 @@ fi;
 
 snykPath=""
 if [[ "${defaultScanningTool}" == "snyk" ]]; then
-    snykPath=$(command -v snyk)
+    snykPath=$(which snyk)
     if [[ -z "$snykPath" ]]; then
         echo "!!! Snyk CLI not found. Please install Snyk CLI and try again !!!"
         exit
@@ -184,9 +183,15 @@ if [[ ! -f "./docker-build-tmp/imageList.txt" ]]; then
     fi
 fi;
 
+
 registryUrl=${MM_REGISTRY_URL}
 if [[ -z ${registryUrl} ]]; then
     registryUrl="artifactory.awsmgmt.massmutual.com"
+fi;
+
+#repositoryName=${MM_REPOSITORY_NAME}
+if [[ -z ${repositoryName} ]]; then
+    repositoryName="docker"
 fi;
 
 if [[  -f "./docker-build-tmp/imageList.txt" ]]; then
@@ -356,4 +361,4 @@ fi;
 
 if [[ -d ./docker-build-tmp ]]; then
     rm -rf ./docker-build-tmp
-fi;
+fi;</div>   
