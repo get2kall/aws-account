@@ -1,4 +1,28 @@
-RDS_HOST: ${{ secrets.RDS_HOST }}
-        RDS_USER: ${{ secrets.RDS_USER }}
-        RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
-        RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
+name: Connect to RDS
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up AWS CLI
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Install MySQL client
+      run: sudo apt-get install mysql-client
+
+    - name: Run MySQL commands
+      run: |
+        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} -e "CREATE DATABASE IF NOT EXISTS ${{ secrets.RDS_DB_NAME }};"
+        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} ${{ secrets.RDS_DB_NAME }} -e "CREATE TABLE IF NOT EXISTS test (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL);"
+        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} ${{ secrets.RDS_DB_NAME }} -e "INSERT INTO test (name) VALUES ('Test');"
+        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} ${{ secrets.RDS_DB_NAME }} -e "DELETE FROM test WHERE name='Test';"
