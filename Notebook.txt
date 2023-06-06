@@ -1,102 +1,68 @@
-import os
-import json
-
-# Read non-empty lines from images.txt into a list
-with open('images.txt', 'r') as f:
-    lines = f.read().splitlines()
-
-# Filter out empty lines
-lines = [line for line in lines if line.strip()]
-
-# Process lines
-matrix = []
-for line in lines:
-    split_line = line.split(':')
-    
-    # Default to 'latest' version if not specified
-    if len(split_line) < 2:
-        split_line.append('latest')
-    
-    split_image = split_line[0].split('/')
-    
-    # Default to 'docker.io' registry if not specified
-    if len(split_image) < 2:
-        split_image.insert(0, 'docker.io')
-    
-    matrix.append({
-        "registry": split_image[0],
-        "image": "/".join(split_image[1:]),
-        "version": split_line[1]
-    })
-
-# Wrap matrix in a dictionary under the "include" key
-json_matrix = json.dumps({"include": matrix})
-
-# Print JSON matrix as an output variable
-print(f"::set-output name=matrix::{json_matrix}")
-
-
-
----------- gh workflow--------------------
-
-
 name: Docker Image
 
 on:
   push:
     branches:
-      - main
+      - develop
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
-
   image-list:
     name: Generate List of Latest Images
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     outputs:
       matrix: ${{ steps.image-list.outputs.matrix }}
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3.5.2
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Install JQ
-      run: sudo apt-get install jq
+      - name: Install JQ
+        run: sudo apt-get install jq -y
 
-    - name: Get Image list
-      id: image-list
-
-      run: |
-        sed -i '/^$/d' images.txt
-        content=$(cat images.txt)
-        json_content=$(jq -R -s -c 'split("\n")[:-1] | map(split(":")) | map({registry: .[0], image: .[1], version: .[2]})' <<< "$content")
-        json_content="{\"include\":$json_content}"
-        echo $json_content
-        echo "matrix=$json_content" >> $GITHUB_OUTPUT
+      - name: Get Image list
+        id: image-list
+        run: |
+          content=$(jq -c . < images.json)
+          content="{\"include\":$content}"
+          echo $content
+          echo "matrix=$content" >> $GITHUB_ENV
 
   update_images:
     name: Update ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }}
     needs: image-list
-    runs-on: org-runner
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix: ${{fromJson(needs.image-list.outputs.matrix)}}
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3.5.2
+        uses: actions/checkout@v3
 
-      - name: install snyk
+      - name: Install Snyk
+        if: ${{ matrix.scanTool == 'snyk' }}
         run: |
           curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
           chmod 777 ./snyk
           sudo mv ./snyk /usr/local/bin/
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Install Wiz
+        if: ${{ matrix.scanTool == 'wizcli' }}
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: |
+          curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli
+          chmod +x wizcli
+          sudo mv wizcli /usr/local/bin/
+          wizcli auth --id $WIZ_CLIENT_ID --secret $WIZ_CLIENT_SECRET
 
       - name: Login to Artifactory
         uses: docker/login-action@v2.1.0
@@ -111,18 +77,20 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Checkout repo
-        uses: actions/checkout@v3.5.2
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-      - name: Install AWS CLi v2
+      - name: Install AWS CLI v2
+        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
         run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip awscliv2.zip
           sudo ./aws/install --update
-          echo "Verify aws version"
+          echo "Verify AWS version"
           aws --version
 
       - name: Configure AWS credentials
+        if: ${{ matrix.registry == '590360573099.dkr.ecr.us-east-1.amazonaws.com' }}
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: "arn:aws:iam::590360573099:role/ecr-custom-role"
@@ -134,30 +102,51 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Create directories for history and failures
-        run: |
-          mkdir -p ${{ github.workspace }}/history
-          mkdir -p ${{ github.workspace }}/failures
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          ref: develop
 
       - name: Run Shell Script
+        id: run_script
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
         run: |
           chmod +x syncImages.sh
-          # Assuming the script has a non-zero exit code on failure
-          if ./syncImages.sh -i ${{ matrix.registry }}/${{matrix.image}}:${{ matrix.version }} --scanTool snyk; then
-            # On success, move the image list to the history folder
-            mv images.txt ${{ github.workspace }}/history/
+          if ./syncImages.sh -i ${{ matrix.registry }}/${{ matrix.image }}:${{ matrix.version }} --scanTool snyk; then
+            echo "${{ matrix.registry }},${{ matrix.image }},${{ matrix.version }},snyk,success,$(date)" >> result-${{ matrix.image }}.txt
+            python process_results.py "${{ matrix.registry }}" "${{ matrix.image }}" "${{ matrix.version }}" "snyk" "success"
           else
-            # On failure, move the image list to the failures folder
-            mv images.txt ${{ github.workspace }}/failures/
+            echo "${{ matrix.registry }},${{ matrix.image }},${{ matrix.version }},snyk,failure,$(date)" >> result-${{ matrix.image }}.txt
+            python process_results.py "${{ matrix.registry }}" "${{ matrix.image }}" "${{ matrix.version }}" "snyk" "failure"
           fi
 
-      - name: Upload history and failures as workflow artifacts
-        uses: actions/upload-artifact@v2
+      - name: Upload result files as artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: image-lists
-          paths: 
-          - ${{ github.workspace }}/history/
-          - ${{ github.workspace }}/failures/
+          name: scan-result
+          path: result-*.txt
 
+  collect-result:
+    needs: update_images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Download result files as artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: scan-result
+          path: .
+
+      - name: Execute Python script
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: pip install pymysql
+      - name: Execute Python script to process results
+        run: python process_results.py
