@@ -1,4 +1,4 @@
-name: Connect to RDS
+name: Create MySQL Table
 
 on: [push]
 
@@ -10,19 +10,32 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Set up AWS CLI
-      uses: aws-actions/configure-aws-credentials@v1
+    - name: Set up Python
+      uses: actions/setup-python@v2
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+        python-version: '3.x'
 
-    - name: Install MySQL client
-      run: sudo apt-get install mysql-client
-
-    - name: Run MySQL commands
+    - name: Install dependencies
       run: |
-        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} -e "CREATE DATABASE IF NOT EXISTS ${{ secrets.RDS_DB_NAME }};"
-        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} ${{ secrets.RDS_DB_NAME }} -e "CREATE TABLE IF NOT EXISTS test (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL);"
-        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} ${{ secrets.RDS_DB_NAME }} -e "INSERT INTO test (name) VALUES ('Test');"
-        mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p${{ secrets.RDS_PASSWORD }} ${{ secrets.RDS_DB_NAME }} -e "DELETE FROM test WHERE name='Test';"
+        python -m pip install --upgrade pip
+        pip install mysql-connector-python
+
+    - name: Create MySQL table
+      run: |
+        import mysql.connector
+        db = mysql.connector.connect(
+          host="${{ secrets.RDS_ENDPOINT }}",
+          user="${{ secrets.RDS_USERNAME }}",
+          password="${{ secrets.RDS_PASSWORD }}",
+          database="your-database-name"
+        )
+        cursor = db.cursor()
+        cursor.execute("""
+          CREATE TABLE your_table_name (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(40) NOT NULL,
+            email VARCHAR(40)
+          )
+        """)
+        db.close()
+      shell: python
