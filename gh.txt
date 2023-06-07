@@ -20,14 +20,24 @@ jobs:
         python -m pip install --upgrade pip
         pip install mysql-connector-python
 
-    - name: Create MySQL table
+    - name: Create MySQL database and table
       run: |
         import mysql.connector
         db = mysql.connector.connect(
           host="${{ secrets.RDS_ENDPOINT }}",
           user="${{ secrets.RDS_USERNAME }}",
+          password="${{ secrets.RDS_PASSWORD }}"
+        )
+        cursor = db.cursor()
+        cursor.execute("CREATE DATABASE IF NOT EXISTS your_database_name;")
+        db.commit()
+        db.close()
+
+        db = mysql.connector.connect(
+          host="${{ secrets.RDS_ENDPOINT }}",
+          user="${{ secrets.RDS_USERNAME }}",
           password="${{ secrets.RDS_PASSWORD }}",
-          database="your-database-name"
+          database="your_database_name"
         )
         cursor = db.cursor()
         cursor.execute("""
