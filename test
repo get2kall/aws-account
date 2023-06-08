@@ -1,33 +1,27 @@
-import pymysql.cursors
-import sys
-import os
+# Base Image
+FROM ubuntu:22.04
 
-def insert_data(registry, image, version, scan_tool, status):
-    host = os.environ['RDS_HOST']
-    user = os.environ['RDS_USER']
-    password = os.environ['RDS_PASSWORD']
-    database = os.environ['RDS_DATABASE']
+# Update system
+RUN apt-get update -y && apt-get upgrade -y
 
-    connection = pymysql.connect(
-        host=host,
-        user=user,
-        password=password,
-        database=database,
-        cursorclass=pymysql.cursors.DictCursor
-    )
+# Install required packages
+RUN apt-get install -y curl jq unzip
 
-    try:
-        with connection.cursor() as cursor:
-            sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
-            cursor.execute(sql, (registry, image, version, scan_tool, status))
-        connection.commit()
-    finally:
-        connection.close()
+# Install AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip awscliv2.zip
+RUN sudo ./aws/install
+RUN aws --version
 
-if __name__ == "__main__":
-    registry = sys.argv[1]
-    image = sys.argv[2]
-    version = sys.argv[3]
-    scan_tool = sys.argv[4]
-    status = sys.argv[5]
-    insert_data(registry, image, version, scan_tool, status)
+# Install Snyk
+RUN curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
+RUN chmod +x ./snyk
+RUN mv ./snyk /usr/local/bin/
+
+# Install WizCLI
+RUN curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli
+RUN chmod +x wizcli
+RUN mv wizcli /usr/local/bin/
+
+# Default command
+CMD ["bash"]
