@@ -1,51 +1,50 @@
-name: Create MySQL Table
+import os
+import sys
+import glob
+import csv
+import pymysql.cursors
 
-on: [push]
+def insert_data(registry, image, version, scan_tool, status):
+    host = os.environ['RDS_HOST']
+    user = os.environ['RDS_USER']
+    password = os.environ['RDS_PASSWORD']
+    database = 'mydatabase'  # hardcoded database name
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+    connection = pymysql.connect(
+        host=host,
+        user=user,
+        password=password,
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("CREATE DATABASE IF NOT EXISTS {};".format(database))
+            cursor.execute("USE {};".format(database))
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS result_data (
+                    registry VARCHAR(255),
+                    image VARCHAR(255),
+                    version VARCHAR(255),
+                    scan_tool VARCHAR(255),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(255)
+                );
+            """)
+            sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
+            cursor.execute(sql, (registry, image, version, scan_tool, status))
+        connection.commit()
+    finally:
+        connection.close()
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install mysql-connector-python
-
-    - name: Create MySQL database and table
-      run: |
-        import mysql.connector
-        db = mysql.connector.connect(
-          host="${{ secrets.RDS_ENDPOINT }}",
-          user="${{ secrets.RDS_USERNAME }}",
-          password="${{ secrets.RDS_PASSWORD }}"
-        )
-        cursor = db.cursor()
-        cursor.execute("CREATE DATABASE IF NOT EXISTS your_database_name;")
-        db.commit()
-        db.close()
-
-        db = mysql.connector.connect(
-          host="${{ secrets.RDS_ENDPOINT }}",
-          user="${{ secrets.RDS_USERNAME }}",
-          password="${{ secrets.RDS_PASSWORD }}",
-          database="your_database_name"
-        )
-        cursor = db.cursor()
-        cursor.execute("""
-          CREATE TABLE your_table_name (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(40) NOT NULL,
-            email VARCHAR(40)
-          )
-        """)
-        db.close()
-      shell: python
+if __name__ == "__main__":
+    for filename in glob.glob('result-*.txt'):
+        image_name = filename.split('-', 1)[-1].rsplit('.', 1)[0]
+        with open(filename, 'r') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) == 5:
+                    row[1] = image_name  # replace image name in the data row with the cleaned image name
+                    insert_data(*row)
+                else:
+                    print(f'Invalid row in {filename}: {row}', file=sys.stderr)
