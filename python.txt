@@ -1,39 +1,74 @@
-import json
 import os
+import sys
+import glob
+import csv
+import pymysql.cursors
 
-# read the images.txt file
-with open("images.txt", "r") as f:
-    lines = f.readlines()
+def insert_data(registry, image, version, scan_tool, status):
+    host = os.environ['RDS_HOST']
+    user = os.environ['RDS_USER']
+    password = os.environ['RDS_PASSWORD']
+    database = 'mydatabase'  # hardcoded database name
 
-# remove empty lines
-lines = [line.strip() for line in lines if line.strip() != ""]
+    connection = pymysql.connect(
+        host=host,
+        user=user,
+        password=password,
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
-images = []
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("CREATE DATABASE IF NOT EXISTS {};".format(database))
+            cursor.execute("USE {};".format(database))
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS result_data (
+                    registry VARCHAR(255),
+                    image VARCHAR(255),
+                    version VARCHAR(255),
+                    scan_tool VARCHAR(255),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(255)
+                );
+            """)
+            sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
+            cursor.execute(sql, (registry, image, version, scan_tool, status))
+        connection.commit()
+    finally:
+        connection.close()
 
-# process each line
-for line in lines:
-    parts = line.split(":")
-    registry_parts = parts[0].split("/")
-    
-    if len(registry_parts) == 3:
-        registry = registry_parts[0]
-        owner = registry_parts[1]
-        image = registry_parts[2]
-    else:
-        registry = registry_parts[0]
-        owner = None
-        image = registry_parts[1]
-    
-    version = parts[1] if len(parts) > 1 else None
-    
-    images.append({"registry": registry, "owner": owner, "image": image, "version": version})
+def fetch_data():
+    host = os.environ['RDS_HOST']
+    user = os.environ['RDS_USER']
+    password = os.environ['RDS_PASSWORD']
+    database = 'mydatabase'
 
-# create the matrix
-matrix = {"include": images}
+    connection = pymysql.connect(
+        host=host,
+        user=user,
+        password=password,
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
-# print the matrix
-print(json.dumps(matrix))
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("USE {};".format(database))
+            cursor.execute("SELECT * FROM result_data ORDER BY timestamp DESC;")
+            result = cursor.fetchall()
+            for row in result:
+                print(row)
+    finally:
+        connection.close()
 
-# write the matrix to the GITHUB_OUTPUT file
-with open(os.getenv('GITHUB_OUTPUT'), 'w') as f:
-    f.write("matrix=" + json.dumps(matrix) + "\n")
+if __name__ == "__main__":
+    for filename in glob.glob('result-*.txt'):
+        image_name = filename.split('-')[-1].replace('.txt', '')
+        with open(filename, 'r') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) == 5:
+                    row[1] = image_name  # replace image name in the data row with the cleaned image name
+                    insert_data(*row)
+                else:
+                    print(f'Invalid row in {filename}: {row}', file=sys.stderr)
+    fetch_data()
