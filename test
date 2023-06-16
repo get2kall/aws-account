@@ -1,27 +1,31 @@
-# Base Image
-FROM ubuntu:22.04
+import json
 
-# Update system
-RUN apt-get update -y && apt-get upgrade -y
+# Configurable fields
+scan_tool = 'snyk'
+registry = 'docker.io'
+repository_name = 'testing'
 
-# Install required packages
-RUN apt-get install -y curl jq unzip
+# Input and output files
+input_file = 'images.txt'
+output_file = 'images.json'
 
-# Install AWS CLI
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-RUN unzip awscliv2.zip
-RUN sudo ./aws/install
-RUN aws --version
+# Read the data from the text file
+with open(input_file, 'r') as f:
+    lines = f.readlines()
 
-# Install Snyk
-RUN curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
-RUN chmod +x ./snyk
-RUN mv ./snyk /usr/local/bin/
+# Process each line and add the additional fields
+data = []
+for line in lines:
+    image, version = line.strip().split(':')
+    image_data = {
+        'registry': registry,
+        'image': image,
+        'version': version,
+        'scanTool': scan_tool,
+        'repositoryName': repository_name,
+    }
+    data.append(image_data)
 
-# Install WizCLI
-RUN curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli
-RUN chmod +x wizcli
-RUN mv wizcli /usr/local/bin/
-
-# Default command
-CMD ["bash"]
+# Write the data to the JSON file
+with open(output_file, 'w') as f:
+    json.dump(data, f, indent=4)
