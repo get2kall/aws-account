@@ -68,12 +68,10 @@ if __name__ == "__main__":
             for row in reader:
                 if len(row) == 5:
                     row[1] = image_name  # replace image name in the data row with the cleaned image name
-                    if row[4] == 'success':
-                        insert_data(*row, status="success")
-                    elif row[4] == 'failure':
-                        insert_data(*row, status="failure")
-                    else:
-                        print(f'Invalid row in {filename}: {row}', file=sys.stderr)
+                    insert_data(*row, status="success")
+                elif len(row) == 4:
+                    row[1] = image_name  # replace image name in the data row with the cleaned image name
+                    insert_data(*row, status="failure")
                 else:
                     print(f'Invalid row in {filename}: {row}', file=sys.stderr)
     fetch_data()
