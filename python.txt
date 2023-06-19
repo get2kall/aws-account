@@ -5,13 +5,11 @@ import csv
 import pymysql.cursors
 
 def insert_data(registry, image, version, scan_tool, status):
-    # Database connection details
     host = os.environ['RDS_HOST']
     user = os.environ['RDS_USER']
     password = os.environ['RDS_PASSWORD']
-    database = 'mydatabase'  # hardcoded database name
+    database = 'mydatabase'
 
-    # Establish database connection
     connection = pymysql.connect(
         host=host,
         user=user,
@@ -33,23 +31,18 @@ def insert_data(registry, image, version, scan_tool, status):
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
-            print(f"Inserting: registry={registry}, image={image}, version={version}, scan_tool={scan_tool}, status={status}")
             sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
             cursor.execute(sql, (registry, image, version, scan_tool, status))
         connection.commit()
-    except Exception as e:
-        print(f"Error inserting data: {e}")
     finally:
         connection.close()
 
 def fetch_data():
-    # Database connection details
     host = os.environ['RDS_HOST']
     user = os.environ['RDS_USER']
     password = os.environ['RDS_PASSWORD']
     database = 'mydatabase'
 
-    # Establish database connection
     connection = pymysql.connect(
         host=host,
         user=user,
@@ -69,18 +62,17 @@ def fetch_data():
 
 if __name__ == "__main__":
     for filename in glob.glob('result-*.txt'):
-        image_name = filename.split('-')[-1].replace('.txt', '')
         with open(filename, 'r') as f:
             reader = csv.reader(f)
             for row in reader:
                 print(f"Processing row: {row}")
-                if len(row) >= 4:
+                if len(row) >= 6:  # checking if there are at least 6 elements in the row
                     registry = row[0]
                     image_info = row[1].rsplit(":", maxsplit=1)
                     image_name = image_info[0]
-                    version = row[2] if len(row) > 2 else ""  # change this line
-                    scan_tool = image_info[1] if len(image_info) == 2 else ""  # change this line
-                    status = row[3] if len(row) > 3 else ""  # change this line
+                    version = image_info[1] if len(image_info) == 2 else ""
+                    scan_tool = row[3]  # the scan_tool is the fourth element in the row
+                    status = row[5]  # the status is the sixth element in the row
                     insert_data(registry, image_name, version, scan_tool, status)
                 else:
                     print(f'Invalid row in {filename}: {row}', file=sys.stderr)
