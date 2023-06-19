@@ -78,9 +78,9 @@ if __name__ == "__main__":
                     registry = row[0]
                     image_info = row[1].rsplit(":", maxsplit=1)
                     image_name = image_info[0]
-                    version = image_info[1] if len(image_info) == 2 else ""
-                    scan_tool = row[2] if len(row) > 2 else ""
-                    status = row[3] if len(row) > 3 else ""
+                    version = row[2] if len(row) > 2 else ""  # change this line
+                    scan_tool = image_info[1] if len(image_info) == 2 else ""  # change this line
+                    status = row[3] if len(row) > 3 else ""  # change this line
                     insert_data(registry, image_name, version, scan_tool, status)
                 else:
                     print(f'Invalid row in {filename}: {row}', file=sys.stderr)
