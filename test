@@ -14,26 +14,25 @@ def insert_data(registry, image, version, scan_tool, status):
         host=host,
         user=user,
         password=password,
-        database=database,  # Specify the database parameter here
         cursorclass=pymysql.cursors.DictCursor
     )
 
     try:
         with connection.cursor() as cursor:
+            cursor.execute("CREATE DATABASE IF NOT EXISTS {};".format(database))
+            cursor.execute("USE {};".format(database))
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS result_data (
                     registry VARCHAR(255),
                     image VARCHAR(255),
                     version VARCHAR(255),
                     scan_tool VARCHAR(255),
-                    status VARCHAR(255),
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(255)
+                );
             """)
-
-            sql = "INSERT INTO result_data (registry, image, version, scan_tool, status) VALUES (%s, %s, %s, %s, %s)"
+            sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
             cursor.execute(sql, (registry, image, version, scan_tool, status))
-
         connection.commit()
     finally:
         connection.close()
@@ -48,13 +47,13 @@ def fetch_data():
         host=host,
         user=user,
         password=password,
-        database=database,  # Specify the database parameter here
         cursorclass=pymysql.cursors.DictCursor
     )
 
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM result_data ORDER BY timestamp DESC")
+            cursor.execute("USE {};".format(database))
+            cursor.execute("SELECT * FROM result_data ORDER BY timestamp DESC;")
             result = cursor.fetchall()
             for row in result:
                 print(row)
@@ -69,7 +68,12 @@ if __name__ == "__main__":
             for row in reader:
                 if len(row) == 5:
                     row[1] = image_name  # replace image name in the data row with the cleaned image name
-                    insert_data(*row)
+                    if row[4] == 'success':
+                        insert_data(*row, status="success")
+                    elif row[4] == 'failure':
+                        insert_data(*row, status="failure")
+                    else:
+                        print(f'Invalid row in {filename}: {row}', file=sys.stderr)
                 else:
                     print(f'Invalid row in {filename}: {row}', file=sys.stderr)
     fetch_data()
