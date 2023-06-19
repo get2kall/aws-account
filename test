@@ -5,11 +5,13 @@ import csv
 import pymysql.cursors
 
 def insert_data(registry, image, version, scan_tool, status):
+    # Database connection details
     host = os.environ['RDS_HOST']
     user = os.environ['RDS_USER']
     password = os.environ['RDS_PASSWORD']
     database = 'mydatabase'  # hardcoded database name
 
+    # Establish database connection
     connection = pymysql.connect(
         host=host,
         user=user,
@@ -27,8 +29,8 @@ def insert_data(registry, image, version, scan_tool, status):
                     image VARCHAR(255),
                     version VARCHAR(255),
                     scan_tool VARCHAR(255),
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    status VARCHAR(255)
+                    status VARCHAR(255),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
             sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
@@ -38,11 +40,13 @@ def insert_data(registry, image, version, scan_tool, status):
         connection.close()
 
 def fetch_data():
+    # Database connection details
     host = os.environ['RDS_HOST']
     user = os.environ['RDS_USER']
     password = os.environ['RDS_PASSWORD']
     database = 'mydatabase'
 
+    # Establish database connection
     connection = pymysql.connect(
         host=host,
         user=user,
@@ -67,11 +71,17 @@ if __name__ == "__main__":
             reader = csv.reader(f)
             for row in reader:
                 if len(row) == 5:
-                    row[1] = image_name  # replace image name in the data row with the cleaned image name
-                    insert_data(*row, status="success")
+                    registry = row[0]
+                    version = row[2]
+                    scan_tool = row[3]
+                    status = "success"
+                    insert_data(registry, image_name, version, scan_tool, status)
                 elif len(row) == 4:
-                    row[1] = image_name  # replace image name in the data row with the cleaned image name
-                    insert_data(*row, status="failure")
+                    registry = row[0]
+                    version = row[1]
+                    scan_tool = row[2]
+                    status = "failure"
+                    insert_data(registry, image_name, version, scan_tool, status)
                 else:
                     print(f'Invalid row in {filename}: {row}', file=sys.stderr)
     fetch_data()
