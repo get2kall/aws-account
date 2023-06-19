@@ -31,16 +31,8 @@ def insert_data(registry, image, version, scan_tool, status):
                     status VARCHAR(255)
                 );
             """)
-            
-            if status == 'success':
-                sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
-                cursor.execute(sql, (registry, image, version, scan_tool, status))
-            else:
-                # In case of failure, you can modify the status value or handle it as per your requirement
-                # Here, I'm setting the status as 'failure' for demonstration purposes
-                sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
-                cursor.execute(sql, (registry, image, version, scan_tool, 'failure'))
-            
+            sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
+            cursor.execute(sql, (registry, image, version, scan_tool, status))
         connection.commit()
     finally:
         connection.close()
@@ -76,7 +68,10 @@ if __name__ == "__main__":
             for row in reader:
                 if len(row) == 5:
                     row[1] = image_name  # replace image name in the data row with the cleaned image name
-                    insert_data(*row)
+                    insert_data(*row, status="success")
+                elif len(row) == 4:
+                    row[1] = image_name  # replace image name in the data row with the cleaned image name
+                    insert_data(*row, status="failure")
                 else:
                     print(f'Invalid row in {filename}: {row}', file=sys.stderr)
     fetch_data()
