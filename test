@@ -40,24 +40,25 @@ def convert_data_to_html(data):
 
 # Push the data to Confluence
 def push_data_to_confluence(html_data, page_id):
+    confluence_url = 'https://your-confluence-url'
+    confluence_username = os.environ['CONFLUENCE_USERNAME']  # Retrieve the username from the secret
+    confluence_password = os.environ['CONFLUENCE_PASSWORD']  # Retrieve the password from the secret
+
     confluence = Confluence(
-        url='https://your-confluence-url',
-        username='your-username',
-        password='your-password'
+        url=confluence_url,
+        username=confluence_username,
+        password=confluence_password
     )
 
     title = 'your-page-title'
-    space = 'your-space-key'
     body = html_data
 
     confluence.update_page(
         page_id=page_id,
         title=title,
         body=body,
-        parent_id=None,
         type='page',
-        representation='storage',
-        space=space
+        representation='storage'
     )
 
 
