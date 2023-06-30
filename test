@@ -1,83 +1,68 @@
 import os
-import sys
-import glob
-import csv
 import pymysql.cursors
+from atlassian import Confluence
 
-def insert_data(registry, image, version, scan_tool, status):
-    # Database connection details
-    host = os.environ['RDS_HOST']
-    user = os.environ['RDS_USER']
-    password = os.environ['RDS_PASSWORD']
-    database = 'mydatabase'  # hardcoded database name
-
-    # Establish database connection
-    connection = pymysql.connect(
-        host=host,
-        user=user,
-        password=password,
-        cursorclass=pymysql.cursors.DictCursor
-    )
-
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("CREATE DATABASE IF NOT EXISTS {};".format(database))
-            cursor.execute("USE {};".format(database))
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS result_data (
-                    registry VARCHAR(255),
-                    image VARCHAR(255),
-                    version VARCHAR(255),
-                    scan_tool VARCHAR(255),
-                    status VARCHAR(255),
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-            """)
-            sql = "INSERT INTO result_data (registry, image, version, scan_tool, timestamp, status) VALUES (%s, %s, %s, %s, NOW(), %s)"
-            cursor.execute(sql, (registry, image, version, scan_tool, status))
-        connection.commit()
-    finally:
-        connection.close()
-
-def fetch_data():
-    # Database connection details
+# Connect to your database
+def get_data_from_db():
     host = os.environ['RDS_HOST']
     user = os.environ['RDS_USER']
     password = os.environ['RDS_PASSWORD']
     database = 'mydatabase'
 
-    # Establish database connection
     connection = pymysql.connect(
         host=host,
         user=user,
         password=password,
+        database=database,
         cursorclass=pymysql.cursors.DictCursor
     )
 
     try:
         with connection.cursor() as cursor:
-            cursor.execute("USE {};".format(database))
             cursor.execute("SELECT * FROM result_data ORDER BY timestamp DESC;")
             result = cursor.fetchall()
-            for row in result:
-                print(row)
+            return result
     finally:
         connection.close()
 
+
+# Convert your data to html
+def convert_data_to_html(data):
+    html = "<table>"
+    for row in data:
+        html += "<tr>"
+        for key, value in row.items():
+            html += "<td>" + str(value) + "</td>"
+        html += "</tr>"
+    html += "</table>"
+    return html
+
+
+# Push the data to Confluence
+def push_data_to_confluence(html_data):
+    confluence = Confluence(
+        url='https://your-confluence-url',
+        username='your-username',
+        password='your-password'
+    )
+
+    page_id = 'your-page-id'
+    title = 'your-page-title'
+    space = 'your-space-key'
+    body = html_data
+
+    confluence.update_page(
+        page_id=page_id,
+        title=title,
+        body=body,
+        parent_id=None,
+        type='page',
+        representation='storage',
+        space=space
+    )
+
+
 if __name__ == "__main__":
-    for filename in glob.glob('result-*.txt'):
-        image_name = filename.split('-')[-1].replace('.txt', '')
-        with open(filename, 'r') as f:
-            reader = csv.reader(f)
-            for row in reader:
-                if len(row) >= 4:
-                    registry = row[0]
-                    image_info = row[1].rsplit(":", maxsplit=1)
-                    image_name = image_info[0]
-                    version = image_info[1] if len(image_info) == 2 else ""
-                    scan_tool = row[3] if len(row) > 3 else ""
-                    status = "success" if len(row) == 5 else "failure"
-                    insert_data(registry, image_name, version, scan_tool, status)
-                else:
-                    print(f'Invalid row in {filename}: {row}', file=sys.stderr)
-    fetch_data()
+    data = get_data_from_db()
+    html_data = convert_data_to_html(data)
+    push_data_to_confluence(html_data)
