@@ -39,14 +39,13 @@ def convert_data_to_html(data):
 
 
 # Push the data to Confluence
-def push_data_to_confluence(html_data):
+def push_data_to_confluence(html_data, page_id):
     confluence = Confluence(
         url='https://your-confluence-url',
         username='your-username',
         password='your-password'
     )
 
-    page_id = 'your-page-id'
     title = 'your-page-title'
     space = 'your-space-key'
     body = html_data
@@ -65,4 +64,5 @@ def push_data_to_confluence(html_data):
 if __name__ == "__main__":
     data = get_data_from_db()
     html_data = convert_data_to_html(data)
-    push_data_to_confluence(html_data)
+    page_id = 'your-page-id'  # Update with the desired page ID
+    push_data_to_confluence(html_data, page_id)
