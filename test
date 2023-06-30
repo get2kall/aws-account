@@ -29,11 +29,21 @@ def get_data_from_db():
 # Convert your data to html
 def convert_data_to_html(data):
     html = "<table>"
+    
+    # Add header row
+    header_row = data[0]  # Assuming the first row contains the header
+    html += "<tr>"
+    for key in header_row.keys():
+        html += "<th>" + str(key) + "</th>"
+    html += "</tr>"
+    
+    # Add data rows
     for row in data:
         html += "<tr>"
-        for key, value in row.items():
+        for value in row.values():
             html += "<td>" + str(value) + "</td>"
         html += "</tr>"
+    
     html += "</table>"
     return html
 
