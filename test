@@ -29,21 +29,42 @@ def get_data_from_db():
 # Convert your data to html
 def convert_data_to_html(data):
     html = "<table>"
-    
+
     # Add header row
     header_row = data[0]  # Assuming the first row contains the header
     html += "<tr>"
     for key in header_row.keys():
         html += "<th>" + str(key) + "</th>"
     html += "</tr>"
-    
-    # Add data rows
+
+    # Group images by name and sort by timestamp
+    image_groups = {}
     for row in data:
+        image_name = row['image_name']
+        timestamp = row['timestamp']
+        if image_name not in image_groups:
+            image_groups[image_name] = []
+        image_groups[image_name].append((timestamp, row))
+
+    # Sort images by timestamp in descending order
+    for image_name, image_versions in image_groups.items():
+        image_versions.sort(key=lambda x: x[0], reverse=True)
+
+    # Add data rows
+    for image_name, image_versions in image_groups.items():
+        latest_version = image_versions[0][1]  # Get the latest version of the image
         html += "<tr>"
-        for value in row.values():
+        for value in latest_version.values():
             html += "<td>" + str(value) + "</td>"
         html += "</tr>"
-    
+
+        # Add previous versions of the image
+        for timestamp, version in image_versions[1:]:
+            html += "<tr>"
+            for value in version.values():
+                html += "<td>" + str(value) + "</td>"
+            html += "</tr>"
+
     html += "</table>"
     return html
 
