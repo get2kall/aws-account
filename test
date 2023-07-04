@@ -46,12 +46,10 @@ def convert_data_to_html(data):
             image_groups[image_name] = []
         image_groups[image_name].append((timestamp, row))
 
-    # Sort images by timestamp in descending order
-    for image_name, image_versions in image_groups.items():
-        image_versions.sort(key=lambda x: x[0], reverse=True)
-
     # Add data rows
     for image_name, image_versions in image_groups.items():
+        # Reverse the order of image_versions list
+        image_versions.reverse()
         latest_version = image_versions[0][1]  # Get the latest version of the image
         html += "<tr>"
         for value in latest_version.values():
