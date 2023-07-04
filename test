@@ -40,7 +40,7 @@ def convert_data_to_html(data):
     # Group images by name and sort by timestamp
     image_groups = {}
     for row in data:
-        image_name = row['image_name']
+        image_name = row['image']  # Replace 'image' with the correct key for the image name
         timestamp = row['timestamp']
         if image_name not in image_groups:
             image_groups[image_name] = []
