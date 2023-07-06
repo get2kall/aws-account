@@ -10,22 +10,23 @@ def extract_data_from_docx(docx_filename):
     # Iterate through each table in the document
     for table in document.tables:
 
-        # Iterate through each row in the table
-        for row in table.rows:
+        # The first row of the table typically contains column headers
+        headers = [cell.text for cell in table.rows[0].cells]
 
-            # Iterate through each cell in the row
-            for cell in row.cells:
+        # Find the index of the column that contains "Image Name : Version"
+        if "Image Name : Version" in headers:
+            column_index = headers.index("Image Name : Version")
 
-                # Check if the cell text contains "Image Name : Version"
-                if "Image Name : Version" in cell.text:
+            # Iterate through each row in the table, starting from the second row
+            for row in table.rows[1:]:
 
-                    # If the cell contains the text, append the cell's text to the list
-                    cell_contents.append(cell.text)
+                # Append the cell's text in the desired column to the list
+                cell_contents.append(row.cells[column_index].text)
 
     return cell_contents
 
 # If Python script and Word document are in the same folder, you can just use the filename
-docx_filename = 'contain.docx'
+docx_filename = 'your_file.docx'
 
 cell_contents = extract_data_from_docx(docx_filename)
 
