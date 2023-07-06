@@ -1,43 +1,37 @@
-from docx import Document
 import csv
+import psycopg2
 
-def extract_data_from_docx(docx_filename):
-    # Open the Word document
-    document = Document(docx_filename)
+# Set up the database connection
+conn = psycopg2.connect(
+    host="hostname",
+    database="database_name",
+    user="username",
+    password="password",
+)
 
-    # This list will store the cell content
-    cell_contents = []
+# Create a new cursor
+cur = conn.cursor()
 
-    # Iterate through each table in the document
-    for table in document.tables:
+# Create the new table
+cur.execute("""
+    CREATE TABLE database (
+        image VARCHAR(255),
+        status VARCHAR(255)
+    )
+""")
 
-        # The first row of the table typically contains column headers
-        headers = [cell.text for cell in table.rows[0].cells]
+# Open the CSV file
+with open('output1.csv', 'r') as f:
+    reader = csv.reader(f)
+    next(reader)  # Skip the header row
+    for row in reader:
+        # Insert each row into the database
+        cur.execute(
+            "INSERT INTO database VALUES (%s, %s)",
+            row
+        )
 
-        # Find the index of the column that contains "Image Name : Version"
-        if "Image Name : Version" in headers:
-            column_index = headers.index("Image Name : Version")
-
-            # Iterate through each row in the table, starting from the second row
-            for row in table.rows[1:]:
-
-                # Append the cell's text in the desired column to the list
-                cell_contents.append(row.cells[column_index].text)
-
-    return cell_contents
-
-def write_to_csv(filename, data):
-    with open(filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        for row in data:
-            writer.writerow([row])
-
-# If Python script and Word document are in the same folder, you can just use the filename
-docx_filename = 'your_file.docx'
-
-cell_contents = extract_data_from_docx(docx_filename)
-
-print(f"Number of images: {len(cell_contents)}")
-
-# Write to a CSV file
-write_to_csv('output.csv', cell_contents)
+# Commit the changes and close the connection
+conn.commit()
+cur.close()
+conn.close()
