@@ -1,98 +1,22 @@
-import os
-import pymysql.cursors
-from atlassian import Confluence
+from docx import Document
 
-# Connect to your database
-def get_data_from_db():
-    host = os.environ['RDS_HOST']
-    user = os.environ['RDS_USER']
-    password = os.environ['RDS_PASSWORD']
-    database = 'mydatabase'
+# Open the Word document
+doc_path = 'document.docx'
+doc = Document(doc_path)
 
-    connection = pymysql.connect(
-        host=host,
-        user=user,
-        password=password,
-        database=database,
-        cursorclass=pymysql.cursors.DictCursor
-    )
+# Find the row that contains "Image Name : Version"
+target_row = None
+for table in doc.tables:
+    for row in table.rows:
+        cell_text = ' '.join(cell.text for cell in row.cells)
+        if "Image Name : Version" in cell_text:
+            target_row = row
+            break
+    if target_row:
+        break
 
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM result_data ORDER BY timestamp DESC;")
-            result = cursor.fetchall()
-            return result
-    finally:
-        connection.close()
+# Extract the data from the target row
+data = [cell.text for cell in target_row.cells]
 
-
-# Convert your data to html
-def convert_data_to_html(data):
-    html = "<table>"
-
-    # Add header row
-    header_row = data[0]  # Assuming the first row contains the header
-    html += "<tr>"
-    for key in header_row.keys():
-        html += "<th>" + str(key) + "</th>"
-    html += "</tr>"
-
-    # Group images by name and sort by timestamp
-    image_groups = {}
-    for row in data:
-        image_name = row['image']  # Replace 'image' with the correct key for the image name
-        timestamp = row['timestamp']
-        if image_name not in image_groups:
-            image_groups[image_name] = []
-        image_groups[image_name].append((timestamp, row))
-
-    # Add data rows
-    for image_name, image_versions in image_groups.items():
-        # Reverse the order of image_versions list
-        image_versions.reverse()
-        latest_version = image_versions[0][1]  # Get the latest version of the image
-        html += "<tr>"
-        for value in latest_version.values():
-            html += "<td>" + str(value) + "</td>"
-        html += "</tr>"
-
-        # Add previous versions of the image
-        for timestamp, version in image_versions[1:]:
-            html += "<tr>"
-            for value in version.values():
-                html += "<td>" + str(value) + "</td>"
-            html += "</tr>"
-
-    html += "</table>"
-    return html
-
-
-# Push the data to Confluence
-def push_data_to_confluence(html_data, page_id):
-    confluence_url = 'https://your-confluence-url'
-    confluence_username = os.environ['CONFLUENCE_USERNAME']  # Retrieve the username from the secret
-    confluence_password = os.environ['CONFLUENCE_PASSWORD']  # Retrieve the password from the secret
-
-    confluence = Confluence(
-        url=confluence_url,
-        username=confluence_username,
-        password=confluence_password
-    )
-
-    title = 'your-page-title'
-    body = html_data
-
-    confluence.update_page(
-        page_id=page_id,
-        title=title,
-        body=body,
-        type='page',
-        representation='storage'
-    )
-
-
-if __name__ == "__main__":
-    data = get_data_from_db()
-    html_data = convert_data_to_html(data)
-    page_id = 'your-page-id'  # Update with the desired page ID
-    push_data_to_confluence(html_data, page_id)
+# Print the extracted data
+print(data)
