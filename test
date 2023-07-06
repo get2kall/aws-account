@@ -4,7 +4,8 @@ def extract_data_from_docx(docx_filename):
     # Open the Word document
     document = Document(docx_filename)
 
-    contents = []
+    # This list will store the cell content
+    cell_contents = []
 
     # Iterate through each table in the document
     for table in document.tables:
@@ -13,20 +14,20 @@ def extract_data_from_docx(docx_filename):
         for row in table.rows:
 
             # Iterate through each cell in the row
-            for i in range(len(row.cells)):
+            for cell in row.cells:
 
-                # Check if the cell text is "Image Name : Version"
-                if "Image Name : Version" in row.cells[i].text:
+                # Check if the cell text contains "Image Name : Version"
+                if "Image Name : Version" in cell.text:
 
-                    # If the cell contains the text, get the text from the next cell
-                    if i+1 < len(row.cells):
-                        contents.append(row.cells[i+1].text)
+                    # If the cell contains the text, append the cell's text to the list
+                    cell_contents.append(cell.text)
 
-    return contents
+    return cell_contents
 
 # If Python script and Word document are in the same folder, you can just use the filename
-docx_filename = 'your_file.docx'
+docx_filename = 'contain.docx'
 
-contents = extract_data_from_docx(docx_filename)
-for content in contents:
+cell_contents = extract_data_from_docx(docx_filename)
+
+for content in cell_contents:
     print(content)
