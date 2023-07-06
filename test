@@ -1,22 +1,32 @@
 from docx import Document
 
-# Open the Word document
-doc_path = 'document.docx'
-doc = Document(doc_path)
+def extract_data_from_docx(docx_filename):
+    # Open the Word document
+    document = Document(docx_filename)
 
-# Find the row that contains "Image Name : Version"
-target_row = None
-for table in doc.tables:
-    for row in table.rows:
-        cell_text = ' '.join(cell.text for cell in row.cells)
-        if "Image Name : Version" in cell_text:
-            target_row = row
-            break
-    if target_row:
-        break
+    # Iterate through each table in the document
+    for table in document.tables:
 
-# Extract the data from the target row
-data = [cell.text for cell in target_row.cells]
+        # Iterate through each row in the table
+        for row in table.rows:
 
-# Print the extracted data
-print(data)
+            # Iterate through each cell in the row
+            for cell in row.cells:
+
+                # Check if the cell text is "Image Name : Version"
+                if "Image Name : Version" in cell.text:
+
+                    # If the cell contains the text, store the data from all cells in the row
+                    data = [cell.text for cell in row.cells]
+                    return data
+
+    return None
+
+# Provide the path to your document
+docx_filename = 'your_file.docx'
+
+data = extract_data_from_docx(docx_filename)
+if data is not None:
+    print('Data:', data)
+else:
+    print('No row found with name "Image Name : Version".')
