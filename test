@@ -1,5 +1,7 @@
 from docx import Document
 
+print("Script started")
+
 def extract_data_from_docx(docx_filename):
     # Open the Word document
     document = Document(docx_filename)
