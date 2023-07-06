@@ -3,7 +3,7 @@ import mysql.connector
 
 # Function to sanitize strings
 def sanitize_string(str):
-    return "".join([ch for ch in str if ch.isalnum() or ch in (' ', '-', '_')])
+    return "".join([ch for ch in str if ch.isalnum() or ch in (' ', '-', '_', ':', '/')])
 
 # Set up the database connection
 conn = mysql.connector.connect(
@@ -24,17 +24,23 @@ cur.execute("""
     )
 """)
 
+# Add the unique constraint to the table
+cur.execute("""
+    ALTER IGNORE TABLE image_data 
+    ADD CONSTRAINT uc_image_status UNIQUE (image,status)
+""")
+
 # Open the CSV file
 with open('output1.csv', 'r') as f:
     reader = csv.reader(f)
     next(reader)  # Skip the header row
     for row in reader:
-        # Sanitize strings and replace empty strings with None
-        sanitized_row = [sanitize_string(value) if value != "" else None for value in row]
+        # Sanitize strings and replace empty strings, None, and 'NULL' with 'published'
+        sanitized_row = [sanitize_string(value) if value not in ("", None, "NULL") else 'published' for value in row]
 
         # Insert each row into the database
         cur.execute(
-            "INSERT INTO image_data (image, status) VALUES (%s, %s)",
+            "INSERT IGNORE INTO image_data (image, status) VALUES (%s, %s)",
             sanitized_row
         )
 
