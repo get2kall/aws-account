@@ -1,4 +1,5 @@
 from docx import Document
+import csv
 
 def extract_data_from_docx(docx_filename):
     # Open the Word document
@@ -25,10 +26,18 @@ def extract_data_from_docx(docx_filename):
 
     return cell_contents
 
+def write_to_csv(filename, data):
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        for row in data:
+            writer.writerow([row])
+
 # If Python script and Word document are in the same folder, you can just use the filename
 docx_filename = 'your_file.docx'
 
 cell_contents = extract_data_from_docx(docx_filename)
 
-for content in cell_contents:
-    print(content)
+print(f"Number of images: {len(cell_contents)}")
+
+# Write to a CSV file
+write_to_csv('output.csv', cell_contents)
