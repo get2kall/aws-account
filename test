@@ -1,8 +1,8 @@
 import csv
-import psycopg2
+import mysql.connector
 
 # Set up the database connection
-conn = psycopg2.connect(
+conn = mysql.connector.connect(
     host="hostname",
     database="database_name",
     user="username",
@@ -14,7 +14,7 @@ cur = conn.cursor()
 
 # Create the new table
 cur.execute("""
-    CREATE TABLE database (
+    CREATE TABLE IF NOT EXISTS database (
         image VARCHAR(255),
         status VARCHAR(255)
     )
@@ -27,7 +27,7 @@ with open('output1.csv', 'r') as f:
     for row in reader:
         # Insert each row into the database
         cur.execute(
-            "INSERT INTO database VALUES (%s, %s)",
+            "INSERT INTO database (image, status) VALUES (%s, %s)",
             row
         )
 
