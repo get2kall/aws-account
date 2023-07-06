@@ -1,21 +1,45 @@
-#!/bin/bash
+from docx import Document
+import csv
 
-# Output file
-output_file="snyk_scan_results.csv"
+def extract_data_from_docx(docx_filename):
+    # Open the Word document
+    document = Document(docx_filename)
 
-# Write the header to the output file
-echo "Image,Vulnerability" > $output_file
+    # This list will store the cell content
+    cell_contents = []
 
-# Read the CSV file line by line
-while IFS=, read -r image
-do
-    # Run the Snyk scan command on each image
-    output=$(snyk container test $image)
+    # Iterate through each table in the document
+    for table in document.tables:
 
-    # Parse the Snyk output to check for vulnerabilities
-    if echo $output | grep -q "No known vulnerabilities"; then
-        echo "$image,No vulnerability" >> $output_file
-    else
-        echo "$image,Vulnerability" >> $output_file
-    fi
-done < images.csv
+        # The first row of the table typically contains column headers
+        headers = [cell.text for cell in table.rows[0].cells]
+
+        # Find the index of the column that contains "Image Name : Version" and "Status/Image URL"
+        if "Image Name : Version" in headers and "Status/Image URL" in headers:
+            image_index = headers.index("Image Name : Version")
+            status_index = headers.index("Status/Image URL")
+
+            # Iterate through each row in the table, starting from the second row
+            for row in table.rows[1:]:
+
+                # Append the cell's text in the desired column to the list
+                cell_contents.append((row.cells[image_index].text, row.cells[status_index].text))
+
+    return cell_contents
+
+def write_to_csv(filename, data):
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["Image Name : Version", "Status/Image URL"])  # write header
+        for row in data:
+            writer.writerow(row)
+
+# If Python script and Word document are in the same folder, you can just use the filename
+docx_filename = 'your_file.docx'
+
+cell_contents = extract_data_from_docx(docx_filename)
+
+print(f"Number of images: {len(cell_contents)}")
+
+# Write to a CSV file
+write_to_csv('output.csv', cell_contents)
