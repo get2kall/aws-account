@@ -1,27 +1,32 @@
 name: Docker Image
 
-on: 
+on:
   workflow_dispatch:
     inputs:
       image:
-        description: 'Docker image to be used' 
+        description: 'The Docker image to process'
         required: true
       version:
-        description: 'Version of the image'
+        description: 'The version of the Docker image'
         required: true
       scanTool:
-        description: 'Scan tool to be used'
+        description: 'The scanning tool to use (e.g., "snyk" or "wiz")'
         required: true
       repositoryName:
-        description: 'Name of the repository'
+        description: 'The name of the repository where the Docker image is stored'
         required: true
+      registry:
+        description: 'The Docker registry where the image is hosted'
+        required: true
+
+permissions:
+  id-token: write
+  contents: write
 
 jobs:
   update_images:
-    name: Update ${{ github.event.inputs.image }}:${{ github.event.inputs.version }}
+    name: Update ${{ github.event.inputs.registry }}/${{ github.event.inputs.image }}:${{ github.event.inputs.version }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
 
     steps:
       - name: Checkout Repository
@@ -48,19 +53,20 @@ jobs:
           WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
 
       - name: Run Shell Script
+        id: run_script
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
           WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
         run: |
           chmod +x syncImages.sh
-          if ./syncImages.sh -i ${{ github.event.inputs.image }}:${{ github.event.inputs.version }} --scanTool ${{ github.event.inputs.scanTool }} --repositoryName ${{ github.event.inputs.repositoryName }}; then
+          if ./syncImages.sh -i ${{ github.event.inputs.registry }}/${{ github.event.inputs.image }}:${{ github.event.inputs.version }} --scanTool ${{ github.event.inputs.scanTool}} --repositoryName ${{ github.event.inputs.repositoryName}}; then
              image_file_name=$(echo "${{ github.event.inputs.image }}" | tr '/:' '__')
 
-            echo "${{ github.event.inputs.image }},${{ github.event.inputs.version }},${{ github.event.inputs.scanTool }},success" >> result-$(echo ${{ github.event.inputs.image }} | tr '/' '-').txt
+            echo "${{ github.event.inputs.registry }},${{ github.event.inputs.image }},${{ github.event.inputs.version }},${{ github.event.inputs.scanTool}},success" >> result-$(echo ${{ github.event.inputs.image }} | tr '/' '-').txt
             
           else
-            echo "${{ github.event.inputs.image }},${{ github.event.inputs.version }},${{ github.event.inputs.scanTool }},failure" >> result-$(echo ${{ github.event.inputs.image }} | tr '/' '-').txt
+            echo "${{ github.event.inputs.registry }},${{ github.event.inputs.image }},${{ github.event.inputs.version }},${{ github.event.inputs.scanTool}},failure" >> result-$(echo ${{ github.event.inputs.image }} | tr '/' '-').txt
             
           fi
 
