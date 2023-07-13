@@ -1,17 +1,104 @@
-- name: Get Image list
-  id: image-list
-  run: |
-    sed -i '/^$/d' images.txt
-    content=$(cat images.txt)
-    json_content=""
-    while IFS= read -r line; do
-        if [[ $line == *":"* ]]; then
-            IFS=':' read -r fullname version <<< "$line"
-            IFS='/' read -r registry image <<< "$fullname"
-            json_content+="{\"registry\": \"$registry\", \"image\": \"$image\", \"version\": \"$version\"},"
-        fi
-    done <<< "$content"
-    json_content="[${json_content%?}]"
-    json_content="{\"include\":$json_content}"
-    echo $json_content
-    echo "matrix=$json_content" >> $GITHUB_ENV
+name: Docker Image
+
+on: 
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Docker image to be used' 
+        required: true
+      version:
+        description: 'Version of the image'
+        required: true
+      scanTool:
+        description: 'Scan tool to be used'
+        required: true
+      repositoryName:
+        description: 'Name of the repository'
+        required: true
+
+jobs:
+  update_images:
+    name: Update ${{ github.event.inputs.image }}:${{ github.event.inputs.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Install Snyk
+        if: ${{ github.event.inputs.scanTool == 'snyk' }}
+        run: |
+          curl https://static.snyk.io/cli/latest/snyk-linux -o snyk
+          chmod +x snyk
+          sudo mv snyk /usr/local/bin/
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Install Wiz
+        if: ${{ github.event.inputs.scanTool == 'wizcli' }}
+        run: |
+          curl -o wizcli https://wizcli.app.wiz.io/latest/wizcli
+          chmod +x wizcli
+          sudo mv wizcli /usr/local/bin/
+          wizcli auth --id $WIZ_CLIENT_ID --secret $WIZ_CLIENT_SECRET
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+
+      - name: Run Shell Script
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: |
+          chmod +x syncImages.sh
+          if ./syncImages.sh -i ${{ github.event.inputs.image }}:${{ github.event.inputs.version }} --scanTool ${{ github.event.inputs.scanTool }} --repositoryName ${{ github.event.inputs.repositoryName }}; then
+             image_file_name=$(echo "${{ github.event.inputs.image }}" | tr '/:' '__')
+
+            echo "${{ github.event.inputs.image }},${{ github.event.inputs.version }},${{ github.event.inputs.scanTool }},success" >> result-$(echo ${{ github.event.inputs.image }} | tr '/' '-').txt
+            
+          else
+            echo "${{ github.event.inputs.image }},${{ github.event.inputs.version }},${{ github.event.inputs.scanTool }},failure" >> result-$(echo ${{ github.event.inputs.image }} | tr '/' '-').txt
+            
+          fi
+
+      - name: Upload result files as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: scan-results
+          path: result-*.txt
+
+  collect-result:
+    needs: update_images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Download result files as artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: scan-results
+          path: .
+
+      - name: Execute Python script
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10.1'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install python3-dev defalt-libmysqlclient-dev build-essential -y
+          pip3 install mysql-client
+          pip install pymysql
+
+      - name: Execute Python script to process results
+        env:
+          RDS_HOST: ${{secrets.RDS_HOST}}
+          RDS_USER: ${{secrets.RDS_USER}}
+          RDS_PASSWORD: ${{secrets.RDS_PASSWORD}}
+          RDS_DATABASE: ${{secrets.RDS_DATABASE}}
+        run: python process_results.py  
